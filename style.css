@@ -1,0 +1,17 @@
+    /* Ajustes básicos de tela */
+    html, body { padding: 0; margin: 0; height: 100%; width: 100%; overflow: hidden;}
+    .esri-view { outline: none !important; }
+
+    /* Estilos personalizados para os botões do menu */
+    .tab-btn.active {
+      background-color: #f0fdf4; /* bg-green-50 */
+      color: #15803d; /* text-green-700 */
+      font-weight: 600;
+    }
+    .tab-btn.inactive {
+      color: #4b5563; /* text-gray-600 */
+    }
+    .tab-btn.inactive:hover {
+      background-color: #f9fafb; /* hover:bg-gray-50 */
+      color: #15803d; /* hover:text-green-700 */
+    }
