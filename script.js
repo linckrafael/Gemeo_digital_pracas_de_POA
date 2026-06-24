@@ -1084,8 +1084,7 @@
           window.atualizarInterfaceEMapa();
         };
 
-
-// --- LÓGICA DE NAVEGAÇÃO DO PAINEL UNIFICADO ---
+// --- LÓGICA DE NAVEGAÇÃO DA BARRA VERTICAL E GAVETA ---
 const btnIntro = document.getElementById('btn-intro');
 const btnMapa = document.getElementById('btn-mapa');
 const btnObras = document.getElementById('btn-obras');
@@ -1096,13 +1095,28 @@ const contentMapa = document.getElementById('content-mapa');
 const contentObras = document.getElementById('content-obras');
 const contentInventario = document.getElementById('content-inventario');
 
+const painelConteudo = document.getElementById('painel-conteudo');
+const textoPainelAtivo = document.getElementById('texto-painel-ativo');
+const iconePainelAtivo = document.getElementById('icone-painel-ativo');
+
 const buttons = [btnIntro, btnMapa, btnObras, btnInventario];
 const contents = [contentIntro, contentMapa, contentObras, contentInventario];
 
-// Reseta o visual das abas do topo do painel e esconde os conteúdos
+// Dicionário de títulos para o cabeçalho da Gaveta
+const infoPaineis = {
+  'btn-intro': { texto: 'Início', icone: '' },
+  'btn-mapa': { texto: 'Estilos de Mapa', icone: '' },
+  'btn-obras': { texto: 'Gestão de Obras', icone: '' },
+  'btn-inventario': { texto: 'Inventário 3D', icone: '' }
+};
+
+const wrapperGaveta = document.getElementById('wrapper-gaveta');
+const barraLateral = document.getElementById('barra-lateral');
+
+// Reseta o visual dos ícones
 function resetTabs() {
   buttons.forEach(btn => {
-    btn.classList.remove('text-green-800', 'bg-green-100/50', 'border-green-600');
+    btn.classList.remove('text-green-700', 'bg-green-50', 'border-green-200', 'shadow-sm');
     btn.classList.add('text-gray-400', 'border-transparent');
   });
   contents.forEach(content => {
@@ -1111,21 +1125,54 @@ function resetTabs() {
   });
 }
 
-// Troca a aba ativa dentro do super painel
+// Abre a Gaveta e EXPANDIR a Barra para o tamanho da tela
 function switchTab(clickedBtn, contentToShow) {
+  const isGavetaAberta = !wrapperGaveta.classList.contains('opacity-0');
+  const isBotaoAtivo = clickedBtn.classList.contains('text-green-700');
+
+  // Interruptor: Fechar ao clicar no mesmo ícone
+  if (isGavetaAberta && isBotaoAtivo) {
+    window.minimizarPainel();
+    return;
+  }
+
   resetTabs();
   
-  // Destaca a aba selecionada
+  // Acende o botão clicado
   clickedBtn.classList.remove('text-gray-400', 'border-transparent');
-  clickedBtn.classList.add('text-green-800', 'bg-green-100/50', 'border-green-600');
+  clickedBtn.classList.add('text-green-700', 'bg-green-50', 'border-green-200', 'shadow-sm');
   
-  // Mostra o conteúdo correspondente
+  textoPainelAtivo.innerText = infoPaineis[clickedBtn.id].texto;
+  iconePainelAtivo.innerText = infoPaineis[clickedBtn.id].icone;
+
   contentToShow.classList.remove('hidden');
   contentToShow.classList.add('block');
+  
+  // 1. MÁGICA: Revela e desliza a gaveta para a esquerda
+  wrapperGaveta.classList.remove('translate-x-12', 'opacity-0', 'pointer-events-none');
+  
+  // 2. METAMORFOSE: Arranca o visual de pílula central e transforma em uma parede direita conectada
+  barraLateral.classList.remove('top-1/2', '-translate-y-1/2', 'rounded-full', 'bg-white/90', 'border', 'py-3');
+  barraLateral.classList.add('top-24', 'bottom-6', 'translate-y-0', 'rounded-r-2xl', 'bg-white/95', 'border-y', 'border-r', 'border-l-0', 'py-6');
 }
 
-// Eventos de clique nas abas do topo
+// Minimiza a Gaveta e ENCOLHE a Barra de volta à Pílula
+window.minimizarPainel = function() {
+  // 1. Esconde a gaveta deslizando
+  wrapperGaveta.classList.add('translate-x-12', 'opacity-0', 'pointer-events-none');
+  
+  // 2. METAMORFOSE: Arranca o visual de parede conectada e volta a ser pílula solta no meio da tela
+  barraLateral.classList.remove('top-24', 'bottom-6', 'translate-y-0', 'rounded-r-2xl', 'bg-white/95', 'border-y', 'border-r', 'border-l-0', 'py-6');
+  barraLateral.classList.add('top-1/2', '-translate-y-1/2', 'rounded-full', 'bg-white/90', 'border', 'py-3');
+  
+  resetTabs();
+};
+
+// Eventos de clique nos ícones
 btnIntro.addEventListener('click', () => switchTab(btnIntro, contentIntro));
 btnMapa.addEventListener('click', () => switchTab(btnMapa, contentMapa));
 btnObras.addEventListener('click', () => switchTab(btnObras, contentObras));
 btnInventario.addEventListener('click', () => switchTab(btnInventario, contentInventario));
+
+// Abre a introdução por padrão ao carregar a página
+switchTab(btnIntro, contentIntro);
