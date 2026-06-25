@@ -316,15 +316,55 @@
           });
         };
 
-        // Adiciona a função de voo para o botão da lista funcionar
+       // --- 1. BUSCA GLOBAL NO CABEÇALHO ---
+        const inputGlobal = document.getElementById('input-pesquisa-global');
+        if (inputGlobal) {
+          inputGlobal.addEventListener('input', (e) => {
+            const termo = e.target.value;
+            renderizarListaPracas(termo);
+            
+            // Espelha o texto para a barra da gaveta
+            const inputLocal = document.getElementById('input-pesquisa-local');
+            if (inputLocal) inputLocal.value = termo;
+            
+            if (termo.trim() !== "") {
+                const contentInventario = document.getElementById('content-inventario');
+                if (contentInventario && contentInventario.classList.contains('hidden')) {
+                    const btnInv = document.getElementById('btn-inventario');
+                    if (btnInv) btnInv.click();
+                }
+                const telaGestao = document.getElementById('tela-gestao-praca');
+                if (telaGestao && !telaGestao.classList.contains('hidden')) {
+                    window.voltarParaListaPracas();
+                }
+            }
+          });
+        }
+
+        // --- 2. BUSCA LOCAL DENTRO DA GAVETA ---
+        const inputLocal = document.getElementById('input-pesquisa-local');
+        if (inputLocal) {
+          inputLocal.addEventListener('input', (e) => {
+            const termo = e.target.value;
+            renderizarListaPracas(termo);
+            
+            // Espelha o texto para a barra do cabeçalho
+            const inputGlob = document.getElementById('input-pesquisa-global');
+            if (inputGlob) inputGlob.value = termo;
+          });
+        }
+
+        // --- NOVA FUNÇÃO: VOA PARA A PRAÇA SEM ABRIR A EDIÇÃO ---
         window.voarParaPraca = function(lon, lat) {
-          view.goTo({ target: [lon, lat], zoom: 19.5, tilt: 45 }, { duration: 2000 });
+          event.stopPropagation(); // Impede que o clique abra a tela de gestão sem querer
+          view.goTo({ 
+            target: [lon, lat], 
+            zoom: 19.5, 
+            tilt: 45 
+          }, { 
+            duration: 2000 
+          });
         };
-        
-        // Ativa o evento: a cada letra que você digita, ele atualiza a lista!
-        document.getElementById('input-pesquisa-praca').addEventListener('input', (e) => {
-          renderizarListaPracas(e.target.value);
-        });
 
         // --- NAVEGAÇÃO DO PAINEL DE INVENTÁRIO (Recuperadas) ---
         window.abrirGestaoPraca = function(idPraca, nomePraca, lon, lat) {
@@ -341,9 +381,19 @@
           pracaAtivaId = null;
           cancelarAcaoMapa();
           graphicsLayer.removeAll();
+          
+          // LIGA TODAS AS PRAÇAS NOVAMENTE (Remove o filtro)
+          view.whenLayerView(pracasLayer).then(function(layerView) {
+            layerView.filter = null;
+          });
+
           document.getElementById('tela-lista-pracas').classList.remove('hidden');
           document.getElementById('tela-gestao-praca').classList.add('hidden');
-          document.getElementById('lista-obras-dinamica').innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Selecione uma praça no Inventário para filtrar as obras.</p>';
+          
+          const divObras = document.getElementById('lista-obras-dinamica');
+          if (divObras) {
+              divObras.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Selecione uma praça no Inventário para filtrar as obras.</p>';
+          }
         };
         // Auxiliar para as cores dinâmicas dos status
         function obterCorStatusObra(status) {
@@ -450,6 +500,20 @@
           // RECUPERADO: Linha vital que filtra os itens cadastrados nesta praça ativa
           const itensDaPraca = window.bancoDeDadosItens.filter(i => i.praca === pracaAtivaId);
 
+          // Puxa os dados oficiais de inventário do arquivo GEOJSON
+          const pracaGeo = window.todasAsPracas.find(p => p.idOficial === pracaAtivaId);
+
+         // --- FILTRO NATIVO: ESCONDE AS OUTRAS PRAÇAS ---
+          if (pracaGeo && pracaGeo.geometriaPoligono) {
+            view.whenLayerView(pracasLayer).then(function(layerView) {
+              // Mantém APENAS a praça que foi clicada visível
+              layerView.filter = {
+                geometry: pracaGeo.geometriaPoligono,
+                spatialRelationship: "intersects"
+              };
+            });
+          }
+
           // Lógica de Renderização de Obras e Inventário Oficial
           const divStatusObra = document.getElementById('status-obra-praca');
           let painelSuperiorHTML = '';
@@ -471,7 +535,7 @@
           }
 
           // 2. Puxa os dados oficiais de inventário do arquivo GEOJSON
-          const pracaGeo = window.todasAsPracas.find(p => p.idOficial === pracaAtivaId);
+        
           if (pracaGeo) {
             const temDado = (valor) => valor && valor.toString().trim() !== "" && valor.toString().trim() !== "0" && valor.toString().trim() !== "Não informado";
             
@@ -508,7 +572,7 @@
           // LOOP: Desenha os GLBs e cria os Cards
           itensDaPraca.forEach(item => {
             
-            // 1. Desenha o seu Modelo GLB (Blindado contra itens normais e auto-gerados)
+            // 1. Desenha o seu Modelo GLB com suporte a borda de status
             let geoItem;
             if (item.geometriaOriginal && typeof item.geometriaOriginal.clone === 'function') {
               geoItem = item.geometriaOriginal.clone();
@@ -519,32 +583,11 @@
 
             const modeloGrafico = new Graphic({
               geometry: geoItem, 
-              attributes: { idVisual: item.id, nome: item.nome, status: item.status, escala: item.escala || 1, tipo: "modelo" }, // NOVO: idVisual
-              symbol: criarSimboloGLB(item.arquivo_glb || 'low_poly_-_park_bench.glb', item.escala || 1, item.rotacao || 0, item.inclinacao || 0) // NOVO: inclinacao
+              attributes: { idVisual: item.id, nome: item.nome, status: item.status, escala: item.escala || 1, tipo: "modelo" },
+              // Passamos o item.status aqui no final para a função saber se desenha a borda ou não:
+              symbol: criarSimboloGLB(item.arquivo_glb || 'low_poly_-_park_bench.glb', item.escala || 1, item.rotacao || 0, item.inclinacao || 0, item.status) 
             });
             graphicsLayer.add(modeloGrafico);
-
-            // --- INDICADOR VISUAL SUTIL ---
-            if (item.status === "Necessita Conserto") {
-              const alturaLevitacao = (item.altitude || 0) + (3 * (item.escala || 1)) + 0.5;
-              const geoAlerta = (geoItem.clone && typeof geoItem.clone === 'function') ? geoItem.clone() : { type: "point", longitude: item.lon, latitude: item.lat, spatialReference: { wkid: 4326 } };
-              geoAlerta.z = alturaLevitacao;
-              
-              const alertaGrafico = new Graphic({
-                geometry: geoAlerta, 
-                attributes: { nome: item.nome, status: item.status, tipo: "alerta" },
-                symbol: {
-                  type: "point-3d",
-                  symbolLayers: [{
-                    type: "object",
-                    resource: { primitive: "sphere" }, 
-                    material: { color: "#ef4444" }, 
-                    height: 0.25, width: 0.25
-                  }]
-                }
-              });
-              graphicsLayer.add(alertaGrafico);
-            }
 
             // 2. Monta o card com o Menu 3D embutido
             divLista.innerHTML += `
@@ -648,7 +691,7 @@
               // MÁGICA: Enquanto arrasta, atualiza SÓ O GRÁFICO específico na memória de vídeo, sem travar o site
               const grafico = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id);
               if (grafico) {
-                 grafico.symbol = criarSimboloGLB(item.arquivo_glb, item.escala, item.rotacao, item.inclinacao || 0);
+                 grafico.symbol = criarSimboloGLB(item.arquivo_glb, item.escala, item.rotacao, item.inclinacao || 0, item.status);
                  
                  // Se mexer na altura, precisa recalcular a coordenada 3D
                  if (propriedade === 'altitude') {
@@ -785,17 +828,29 @@
         };
 
         // --- ATUALIZAÇÃO DA FUNÇÃO QUE DESENHA O ITEM ---
-        function criarSimboloGLB(arquivo, escala = 1, rotacao = 0, inclinacao = 0) {
+        function criarSimboloGLB(arquivo, escala = 1, rotacao = 0, inclinacao = 0, status = "OK") {
           const caminhoArquivo = arquivo.includes('/') ? arquivo : "modelos/" + arquivo;
+          
+          const configuracaoObjeto = {
+            type: "object",
+            resource: { href: "./" + caminhoArquivo },
+            height: 3 * escala, 
+            heading: rotacao,     // Giro (Z)
+            tilt: inclinacao      // Inclinação (X/Y)
+          };
+
+          // MÁGICA: Se precisa de conserto, aplica uma borda (arestas) vermelha ao redor do modelo 3D
+          if (status === "Necessita Conserto") {
+            configuracaoObjeto.edges = {
+              type: "solid",
+              color: "#ef4444", // Vermelho
+              size: 2.5       // Espessura da borda
+            };
+          }
+
           return {
             type: "point-3d",
-            symbolLayers: [{
-              type: "object",
-              resource: { href: "./" + caminhoArquivo },
-              height: 3 * escala, 
-              heading: rotacao,     // Giro (Z)
-              tilt: inclinacao      // Inclinação (X/Y)
-            }]
+            symbolLayers: [configuracaoObjeto]
           };
         }
 
@@ -927,20 +982,19 @@
             atualizarInterfaceEMapa();
           }
           else {
-            // DETECTA CLIQUE NO POLÍGONO DA PRAÇA 
+            // DETECTA CLIQUE NO POLÍGONO DA PRAÇA OU FORA DELE
             view.hitTest(event).then(function(response) {
               const pracaClicadaHit = response.results.find(
                 (resultado) => resultado.graphic.layer && resultado.graphic.layer.id === "pracas-parques"
               );
 
               if (pracaClicadaHit) {
-                const pracaGraphic = pracaClicadaHit.graphic;
-                const atributos = pracaGraphic.attributes;
-                
-                // USA A MESMA FUNÇÃO UNIFICADORA DO PAINEL LATERAL
+                const atributos = pracaClicadaHit.graphic.attributes;
                 const infoPraca = extrairIdENomePraca(atributos);
                 
-                // Configura as coordenadas de voo padrão para manter o foco perfeito
+                // Se clicou na praça que JÁ ESTÁ selecionada, não faz nada
+                if (infoPraca.id === pracaAtivaId) return;
+
                 let lonVoo = event.mapPoint.longitude;
                 let latVoo = event.mapPoint.latitude;
                 
@@ -949,11 +1003,15 @@
                 else if (infoPraca.id === "Redencao") { lonVoo = -51.2185; latVoo = -30.0355; }
                 else if (infoPraca.id === "Carlesso") { lonVoo = -51.194719; latVoo = -29.984137; }
 
-                // Abre a gestão usando exatamente a mesma ID e Nome
                 window.abrirGestaoPraca(infoPraca.id, infoPraca.nome, lonVoo, latVoo);
                 
                 if (document.getElementById('content-inventario').classList.contains('hidden')) {
                   document.getElementById('btn-inventario').click();
+                }
+              } else {
+                // CLICOU FORA: Limpa a praça ativa e volta todas à tela
+                if (pracaAtivaId !== null) {
+                  window.voltarParaListaPracas();
                 }
               }
             });
@@ -1084,8 +1142,7 @@
           window.atualizarInterfaceEMapa();
         };
 
-
-// --- LÓGICA DE NAVEGAÇÃO DO PAINEL UNIFICADO ---
+// --- LÓGICA DE NAVEGAÇÃO DA BARRA VERTICAL E GAVETA ---
 const btnIntro = document.getElementById('btn-intro');
 const btnMapa = document.getElementById('btn-mapa');
 const btnObras = document.getElementById('btn-obras');
@@ -1096,14 +1153,31 @@ const contentMapa = document.getElementById('content-mapa');
 const contentObras = document.getElementById('content-obras');
 const contentInventario = document.getElementById('content-inventario');
 
+const painelConteudo = document.getElementById('painel-conteudo');
+const textoPainelAtivo = document.getElementById('texto-painel-ativo');
+const iconePainelAtivo = document.getElementById('icone-painel-ativo');
+
 const buttons = [btnIntro, btnMapa, btnObras, btnInventario];
 const contents = [contentIntro, contentMapa, contentObras, contentInventario];
 
-// Reseta o visual das abas do topo do painel e esconde os conteúdos
+// Dicionário de títulos para o cabeçalho da Gaveta
+const infoPaineis = {
+  'btn-intro': { texto: 'Início', icone: '' },
+  'btn-mapa': { texto: 'Estilos de Mapa', icone: '' },
+  'btn-obras': { texto: 'Gestão de Obras', icone: '' },
+  'btn-inventario': { texto: 'Inventário 3D', icone: '' }
+};
+
+const wrapperGaveta = document.getElementById('wrapper-gaveta');
+const barraLateral = document.getElementById('barra-lateral');
+
+// Reseta o visual dos ícones (limpa tudo para garantir a troca de cor)
 function resetTabs() {
   buttons.forEach(btn => {
-    btn.classList.remove('text-green-800', 'bg-green-100/50', 'border-green-600');
-    btn.classList.add('text-gray-400', 'border-transparent');
+    // Remove o verde forte (fechado) e o verde claro (ativo)
+    btn.classList.remove('text-white', 'bg-[#1cca5b]', 'border-green-700', 'shadow-md', 'backdrop-blur-sm', 'bg-green-50', 'text-green-800', 'border-green-200', 'shadow-sm');
+    // Deixa os botões inativos neutros para quando a gaveta estiver aberta
+    btn.classList.add('text-gray-400', 'border-transparent', 'bg-transparent');
   });
   contents.forEach(content => {
     content.classList.add('hidden');
@@ -1111,21 +1185,57 @@ function resetTabs() {
   });
 }
 
-// Troca a aba ativa dentro do super painel
+// Abre a Gaveta e EXPANDIR a Barra para o tamanho da tela
 function switchTab(clickedBtn, contentToShow) {
+  const isGavetaAberta = !wrapperGaveta.classList.contains('opacity-0');
+  // Agora a verificação de "ativo" busca o tom do cabeçalho
+  const isBotaoAtivo = clickedBtn.classList.contains('bg-green-50');
+
+  // Interruptor: Fechar ao clicar no mesmo ícone
+  if (isGavetaAberta && isBotaoAtivo) {
+    window.minimizarPainel();
+    return;
+  }
+
   resetTabs();
   
-  // Destaca a aba selecionada
-  clickedBtn.classList.remove('text-gray-400', 'border-transparent');
-  clickedBtn.classList.add('text-green-800', 'bg-green-100/50', 'border-green-600');
+  // BOTÃO ATIVO: Fica com o mesmo tom clarinho do cabeçalho (bg-green-50)
+  clickedBtn.classList.remove('text-gray-400', 'border-transparent', 'bg-transparent');
+  clickedBtn.classList.add('text-green-800', 'bg-green-50', 'border-green-200', 'shadow-sm');
   
-  // Mostra o conteúdo correspondente
+  textoPainelAtivo.innerText = infoPaineis[clickedBtn.id].texto;
+  iconePainelAtivo.innerText = infoPaineis[clickedBtn.id].icone;
+
   contentToShow.classList.remove('hidden');
   contentToShow.classList.add('block');
+  
+  wrapperGaveta.classList.remove('translate-x-12', 'opacity-0', 'pointer-events-none');
+  
+  barraLateral.classList.remove('top-1/2', '-translate-y-1/2', 'bg-transparent', 'border-transparent', 'shadow-none', 'py-3');
+  barraLateral.classList.add('top-24', 'bottom-6', 'translate-y-0', 'rounded-r-2xl', 'bg-white/95', 'border-y', 'border-r', 'border-l-0', 'py-6', 'shadow-2xl', 'backdrop-blur-xl');
 }
 
-// Eventos de clique nas abas do topo
+// Minimiza a Gaveta e ENCOLHE a Barra separando os botões
+window.minimizarPainel = function() {
+  wrapperGaveta.classList.add('translate-x-12', 'opacity-0', 'pointer-events-none');
+  
+  barraLateral.classList.remove('top-24', 'bottom-6', 'translate-y-0', 'rounded-r-2xl', 'bg-white/95', 'border-y', 'border-r', 'border-l-0', 'py-6', 'shadow-2xl', 'backdrop-blur-xl');
+  barraLateral.classList.add('top-1/2', '-translate-y-1/2', 'bg-transparent', 'border-transparent', 'shadow-none', 'py-3');
+  
+  resetTabs();
+
+  // BOTÕES INDIVIDUAIS: Ganham o verde mais forte quando estão flutuando no mapa
+  buttons.forEach(btn => {
+    btn.classList.remove('text-gray-400', 'border-transparent', 'bg-transparent');
+    btn.classList.add('bg-[#1cca5b]', 'text-white', 'shadow-md', 'border-green-700', 'backdrop-blur-sm');
+  });
+};
+
+// Eventos de clique nos ícones
 btnIntro.addEventListener('click', () => switchTab(btnIntro, contentIntro));
 btnMapa.addEventListener('click', () => switchTab(btnMapa, contentMapa));
 btnObras.addEventListener('click', () => switchTab(btnObras, contentObras));
 btnInventario.addEventListener('click', () => switchTab(btnInventario, contentInventario));
+
+// Abre a introdução por padrão ao carregar a página
+switchTab(btnIntro, contentIntro);
