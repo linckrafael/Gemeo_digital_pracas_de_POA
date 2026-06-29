@@ -572,7 +572,7 @@
           // LOOP: Desenha os GLBs e cria os Cards
           itensDaPraca.forEach(item => {
             
-            // 1. Desenha o seu Modelo GLB com suporte a borda de status
+            // 1. Desenha o seu Modelo GLB (Agora passando o status de novo!)
             let geoItem;
             if (item.geometriaOriginal && typeof item.geometriaOriginal.clone === 'function') {
               geoItem = item.geometriaOriginal.clone();
@@ -584,10 +584,33 @@
             const modeloGrafico = new Graphic({
               geometry: geoItem, 
               attributes: { idVisual: item.id, nome: item.nome, status: item.status, escala: item.escala || 1, tipo: "modelo" },
-              // Passamos o item.status aqui no final para a função saber se desenha a borda ou não:
+              // ATENÇÃO: item.status foi adicionado no final para acionar o fantasma!
               symbol: criarSimboloGLB(item.arquivo_glb || 'low_poly_-_park_bench.glb', item.escala || 1, item.rotacao || 0, item.inclinacao || 0, item.status) 
             });
             graphicsLayer.add(modeloGrafico);
+
+            // 2. A MÁGICA: O SUPER ÍCONE COLADO
+            if (item.status === "Necessita Conserto") {
+              const geoHolograma = geoItem.clone();
+              
+              // Em vez de voar alto, ele gruda no chão (apenas 50 centímetros acima do ponto base do objeto)
+              geoHolograma.z = (item.altitude || 0) + 0.5;
+
+              const hologramaGrafico = new Graphic({
+                geometry: geoHolograma,
+                attributes: { idVisual: item.id, tipo: "holograma" }, 
+                symbol: {
+                  type: "point-3d",
+                  symbolLayers: [{
+                    type: "text", 
+                    text: "⚠️", // Trocamos para o triângulo amarelo que chama MUITO mais atenção no verde
+                    size: 65,   // TAMANHO GIGANTE
+                    halo: { color: [255, 255, 255, 0.9], size: 3 } // Contorno branco bem forte
+                  }]
+                }
+              });
+              graphicsLayer.add(hologramaGrafico);
+            }
 
             // 2. Monta o card com o Menu 3D embutido
             divLista.innerHTML += `
@@ -688,16 +711,26 @@
               window.sincronizarAtualizacaoNuvem(item);
               window.atualizarInterfaceEMapa(); 
             } else {
-              // MÁGICA: Enquanto arrasta, atualiza SÓ O GRÁFICO específico na memória de vídeo, sem travar o site
-              const grafico = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id);
+              // 1. Atualiza o Modelo 3D no mapa
+              const grafico = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id && g.attributes.tipo === "modelo");
               if (grafico) {
-                 grafico.symbol = criarSimboloGLB(item.arquivo_glb, item.escala, item.rotacao, item.inclinacao || 0, item.status);
+                 grafico.symbol = criarSimboloGLB(item.arquivo_glb, item.escala, item.rotacao, item.inclinacao || 0);
                  
-                 // Se mexer na altura, precisa recalcular a coordenada 3D
                  if (propriedade === 'altitude') {
                      const novaGeometria = grafico.geometry.clone();
                      novaGeometria.z = numVal;
                      grafico.geometry = novaGeometria;
+                 }
+              }
+
+              // 2. Atualiza o Holograma Flutuante para acompanhar a altitude
+              const holograma = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id && g.attributes.tipo === "holograma");
+              if (holograma) {
+                 if (propriedade === 'altitude') {
+                     const novaGeoHolograma = holograma.geometry.clone();
+                     // Mantém o holograma sempre colado no piso do objeto
+                     novaGeoHolograma.z = item.altitude + 0.5;
+                     holograma.geometry = novaGeoHolograma;
                  }
               }
             }
@@ -827,7 +860,7 @@
           document.getElementById('msg-instrucao').classList.remove('hidden');
         };
 
-        // --- ATUALIZAÇÃO DA FUNÇÃO QUE DESENHA O ITEM ---
+        // --- FUNÇÃO QUE DESENHA O ITEM ---
         function criarSimboloGLB(arquivo, escala = 1, rotacao = 0, inclinacao = 0, status = "OK") {
           const caminhoArquivo = arquivo.includes('/') ? arquivo : "modelos/" + arquivo;
           
@@ -835,17 +868,13 @@
             type: "object",
             resource: { href: "./" + caminhoArquivo },
             height: 3 * escala, 
-            heading: rotacao,     // Giro (Z)
-            tilt: inclinacao      // Inclinação (X/Y)
+            heading: rotacao,
+            tilt: inclinacao
           };
 
-          // MÁGICA: Se precisa de conserto, aplica uma borda (arestas) vermelha ao redor do modelo 3D
+          // O FANTASMA VERMELHO: Garante que objetos gigantes (como quadras) fiquem 100% visíveis
           if (status === "Necessita Conserto") {
-            configuracaoObjeto.edges = {
-              type: "solid",
-              color: "#ef4444", // Vermelho
-              size: 2.5       // Espessura da borda
-            };
+            configuracaoObjeto.material = { color: [239, 68, 68, 0.5] }; // Vermelho translúcido
           }
 
           return {
