@@ -6,8 +6,9 @@
       "esri/layers/GraphicsLayer",
       "esri/widgets/BasemapGallery",
       "esri/layers/GeoJSONLayer",
-      "esri/layers/FeatureLayer"
-    ], function(Map, SceneView, Graphic, GraphicsLayer, BasemapGallery, GeoJSONLayer, FeatureLayer) {
+      "esri/layers/FeatureLayer",
+      "esri/layers/TileLayer"
+    ], function(Map, SceneView, Graphic, GraphicsLayer, BasemapGallery, GeoJSONLayer, FeatureLayer, TileLayer) {
 
       // Camada configurada para permitir elevação no relevo 3D
       const graphicsLayer = new GraphicsLayer({
@@ -34,11 +35,27 @@
         }
       });
 
-      const map = new Map({
-        basemap: "topo-3d",
-        ground: "world-elevation",
-        layers: [graphicsLayer, pracasLayer]
+      // --- NOVO: Camada de Satélite Global da Esri ---
+      const camadaSatelite = new TileLayer({
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+        opacity: 0.5 // Inicia em 50% (Mescla exata com o mapa base)
       });
+
+      const map = new Map({
+        basemap: "osm", // MÁGICA: Trocamos para o mapa vetorial plano (sem prédios 3D)
+        ground: "world-elevation", // Mantém o relevo do terreno (morros) em 3D
+        layers: [camadaSatelite, graphicsLayer, pracasLayer] 
+      });
+
+      // --- CONEXÃO DO SLIDER HTML COM A OPACIDADE DO SATÉLITE ---
+      const sliderMescla = document.getElementById('slider-mescla-mapa');
+      if (sliderMescla) {
+        sliderMescla.addEventListener('input', function(event) {
+          // O slider vai de 0 a 100. A opacidade do ArcGIS vai de 0.0 a 1.0.
+          // Dividimos por 100 para converter!
+          camadaSatelite.opacity = event.target.value / 100;
+        });
+      }
 
       // --- AJUSTE DE CÂMERA AQUI ---
       // Pointing the camera precisely at the broken bench location on load.
@@ -84,6 +101,48 @@
 
         window.bancoDeDadosItens = []; // Começa vazio
 
+        // --- DICIONÁRIO INTELIGENTE DE GAVETAS ---
+        window.obterNomeGaveta = function(arquivo_glb) {
+            const arq = (arquivo_glb || "").toLowerCase();
+            
+            if (arq.includes('bench_low_poly') || arq.includes('park_bench')) return "Bancos";
+            
+            // MÁGICA: A Iluminação precisa vir ANTES das Árvores para o 'streetlight' não ser confundido com 'tree'!
+            if (arq.includes('lamp_post') || arq.includes('street_lamp') || arq.includes('streetlight')) return "Iluminação (Postes)";
+            if (arq.includes('tree') || arq.includes('palm_tree') || arq.includes('pine_tree')) return "Árvores e Vegetação";
+            
+            if (arq.includes('trash_can') || arq.includes('drinking_fountain')) return "Lixeiras e Bebedouros";
+            if (arq.includes('toilet_stall') || arq.includes('vestiario')) return "Banheiros e Vestiários";
+            if (arq.includes('statue') || arq.includes('monument')) return "Monumentos Históricos";
+            if (arq.includes('chess')) return "Mesas de Jogo (Dama/Xadrez)";
+            if (arq.includes('court') || arq.includes('sahasi') || arq.includes('bocha') || arq.includes('tenis') || arq.includes('volei') || arq.includes('beach_tennis')) return "Quadras Esportivas e Canchas";
+            if (arq.includes('skate') || arq.includes('halfpipe')) return "Pistas de Skate";
+            if (arq.includes('playground') || arq.includes('seesaw') || arq.includes('slide')) return "Playground Infantil";
+            if (arq.includes('calisthenics') || arq.includes('gym') || arq.includes('academia')) return "Academia ao Ar Livre";
+            if (arq.includes('barbecue') || arq.includes('churrasqueira')) return "Churrasqueiras";
+            if (arq.includes('pergola') || arq.includes('estar')) return "Áreas de Estar e Pergolados";
+            
+            return "Outros Equipamentos";
+        };
+
+        // --- FOCO BIDIRECIONAL (Card -> Mapa) ---
+        window.focarObjetoNoMapa = function(id) {
+          // Procura o objeto dentro dos gráficos desenhados no mapa 3D
+          const graphic = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id && g.attributes.tipo === "modelo");
+          
+          if (graphic) {
+            // Voa a câmera para pertinho do objeto, focando de cima
+            view.goTo({ target: graphic, zoom: 21.5, tilt: 60 }, { duration: 1500 });
+
+            // Dá uma piscada no card para o usuário não se perder
+            const card = document.getElementById(`card-item-${id}`);
+            if (card) {
+                card.classList.add('border-purple-500', 'ring-2', 'ring-purple-300', 'bg-purple-50');
+                setTimeout(() => card.classList.remove('border-purple-500', 'ring-2', 'ring-purple-300', 'bg-purple-50'), 2000);
+            }
+          }
+        };
+
         // --- MOTORES DE SINCRONIZAÇÃO COM A NUVEM ---
         window.sincronizarAdicaoNuvem = function(novoItem, geometriaExata) {
           const graphicNovo = new Graphic({
@@ -96,9 +155,20 @@
               escala: novoItem.escala,
               rotacao: novoItem.rotacao,
               altitude: novoItem.altitude,
-              inclinacao: novoItem.inclinacao || 0 
+              inclinacao: novoItem.inclinacao || 0,
+              // CORREÇÃO: Enviamos 'null' em vez de texto vazio para não estourar o banco do ArcGIS
+              obra_titulo: novoItem.titulo || null,
+              obra_imagem: novoItem.imagem || null,
+              obra_empreiteira: novoItem.empreiteira || null,
+              obra_orcamento: novoItem.orcamento ? parseFloat(novoItem.orcamento) : null,
+              obra_inicio: novoItem.dataInicio || null,
+              obra_fim: novoItem.dataFim || null,
+              obra_status: novoItem.statusObra || null,
+              obra_progresso: novoItem.porcentagem || null,
+              obra_desc: novoItem.descricao || null
             }
           });
+          
           graphicNovo.geometry.z = novoItem.altitude || 0;
           
           window.camadaItensNuvem.applyEdits({ addFeatures: [graphicNovo] }).then(function(resultado) {
@@ -167,20 +237,15 @@
         window.camadaItensNuvem.queryFeatures({ where: "1=1", outFields: ["*"], returnGeometry: true }).then(function(results) {
            
            window.bancoDeDadosItens = results.features.map(f => {
-              // Busca o ID oficial ignorando se está em maiúsculo ou minúsculo no servidor da prefeitura
               let idReal = null;
               for (const key in f.attributes) {
-                  if (key.toLowerCase() === 'objectid' || key.toLowerCase() === 'fid') {
-                      idReal = f.attributes[key];
-                      break;
-                  }
+                  if (key.toLowerCase() === 'objectid' || key.toLowerCase() === 'fid') { idReal = f.attributes[key]; break; }
               }
-              // Se por algum milagre não achar, cria um de segurança para não travar
               idReal = idReal || f.attributes.OBJECTID || Math.floor(Math.random() * 1000000);
               
               return {
                  objectId: idReal,
-                 id: idReal, // Agora cada objeto terá sua própria identidade blindada!
+                 id: idReal,
                  praca: f.attributes.praca_id,
                  nome: f.attributes.nome,
                  arquivo_glb: f.attributes.arquivo_glb,
@@ -191,21 +256,58 @@
                  inclinacao: f.attributes.inclinacao || 0, 
                  lon: f.geometry.longitude || f.geometry.x, 
                  lat: f.geometry.latitude || f.geometry.y,
-                 geometriaOriginal: f.geometry // A MÁGICA: Guarda o formato geométrico oficial da prefeitura
+                 geometriaOriginal: f.geometry,
+                 
+                 // --- LENDO OS CAMPOS DE OBRA DO SEU BANCO DE DADOS ---
+                 obra_titulo: f.attributes.obra_titulo,
+                 obra_imagem: f.attributes.obra_imagem,
+                 obra_empreiteira: f.attributes.obra_empreiteira,
+                 obra_orcamento: f.attributes.obra_orcamento,
+                 obra_inicio: f.attributes.obra_inicio, 
+                 obra_fim: f.attributes.obra_fim,
+                 obra_status: f.attributes.obra_status,
+                 obra_progresso: f.attributes.obra_progresso,
+                 obra_desc: f.attributes.obra_desc
               };
            });
-           console.log(`✅ Sucesso: ${window.bancoDeDadosItens.length} itens carregados da nuvem!`);
+
+           // --- MÁGICA: CRIA A LISTA DE OBRAS PUXANDO DIRETO DA NUVEM ---
+           // Filtra apenas os itens que tem título de obra preenchido
+           window.bancoDeDadosObras = window.bancoDeDadosItens
+             .filter(i => i.obra_titulo && i.obra_titulo.trim() !== "")
+             .map(i => {
+                // O ArcGIS devolve datas em milissegundos (Epoch). Convertendo para "YYYY-MM-DD" pro HTML
+                const formataData = (epoch) => {
+                   if(!epoch) return "";
+                   const d = new Date(epoch);
+                   return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                };
+                
+                return {
+                   id: i.id, 
+                   praca: i.praca,
+                   local: window.todasAsPracas.find(p => p.idOficial === i.praca)?.nome || "Praça Desconhecida",
+                   titulo: i.obra_titulo,
+                   imagem: i.obra_imagem,
+                   empreiteira: i.obra_empreiteira,
+                   orcamento: i.obra_orcamento || "0", 
+                   dataInicio: formataData(i.obra_inicio),
+                   dataFim: formataData(i.obra_fim),
+                   status: i.obra_status || "Planejado",
+                   porcentagem: i.obra_progresso || 0,
+                   descricao: i.obra_desc || "",
+                   lon: i.lon,
+                   lat: i.lat
+                };
+             });
+
+           console.log(`✅ Sucesso: ${window.bancoDeDadosItens.length} itens (e ${window.bancoDeDadosObras.length} obras) carregados da nuvem!`);
            
+           window.renderizarPainelObras(); // Renderiza o painel lateral de obras com dados da nuvem
            if (pracaAtivaId) window.atualizarInterfaceEMapa();
+
         }).catch(erro => console.error("🔴 Erro ao ler da nuvem:", erro));
-
-        // --- BANCO DE DADOS FICTÍCIO DE OBRAS (Restaurado) ---
-        window.bancoDeDadosObras = [
-          { id: 1, praca: "Matriz", local: "Praça da Matriz", titulo: "Revitalização do Calçamento", descricao: "Troca de pavimentação das calçadas com blocos de concreto intertravado.", status: "Em Execução", porcentagem: 45, data: "2026-06-15", lon: -51.2305, lat: -30.0338 },
-          { id: 2, praca: "Carlesso", local: "Praça Antônio Carlesso", titulo: "Reforma Esportiva e Paisagismo", descricao: "Reforma completa da quadra esportiva, pintura do alambrado e plantio de mudas.", status: "Planejado", porcentagem: 0, data: "2026-08-01", lon: -51.194719, lat: -29.984137 },
-          { id: 3, praca: "Redencao", local: "Parque Farroupilha", titulo: "Manutenção Playground", descricao: "Manutenção estrutural dos brinquedos do playground principal e troca de areia.", status: "Concluído", porcentagem: 100, data: "2026-05-10", lon: -51.2185, lat: -30.0355 }
-        ];
-
+      
         // --- VARIÁVEIS DE CONTROLE DE ESTADO (Recuperadas) ---
         let pracaAtivaId = null;
         let modoInteracaoMapa = null; 
@@ -415,81 +517,283 @@
           });
         };
 
-        // --- SISTEMA CRUD DO PAINEL DE OBRAS ---
+        // --- NOVO MOTOR DO PAINEL DE OBRAS (COM INTEGRAÇÃO 3D) ---
+        window.filtroObrasAtivo = 'Todos';
+
+        window.filtrarObras = function(status) {
+          window.filtroObrasAtivo = status;
+          
+          // Estiliza as pílulas de filtro
+          const classesInativas = "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-white text-gray-500 border border-transparent hover:bg-gray-50";
+          ['Todos', 'Em Execução', 'Planejado', 'Concluído'].forEach(s => {
+             const btn = document.getElementById(`btn-filtro-obra-${s.replace(' ', '')}`);
+             if (btn) {
+               if (s === status) {
+                 btn.className = "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-gray-800 text-white shadow-sm border border-gray-800";
+               } else {
+                 btn.className = classesInativas;
+               }
+             }
+          });
+          window.renderizarPainelObras();
+        };
+
         window.renderizarPainelObras = function() {
           const divObras = document.getElementById('lista-todas-obras');
           divObras.innerHTML = '';
 
-          window.bancoDeDadosObras.forEach(obra => {
-            const cor = obterCorStatusObra(obra.status);
+          // Filtra itens da nuvem que possuem título de obra (indica que é um item em obra)
+          let obrasFiltradas = window.bancoDeDadosItens.filter(i => i.obra_titulo && i.obra_titulo.trim() !== "");
+
+          // Aplica o Filtro Global de Status (se selecionado)
+          if (window.filtroObrasAtivo !== 'Todos') {
+            obrasFiltradas = obrasFiltradas.filter(o => o.obra_status === window.filtroObrasAtivo);
+          }
+
+          if (obrasFiltradas.length === 0) {
+            divObras.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Nenhuma obra registrada para este filtro.</p>';
+            return;
+          }
+
+          obrasFiltradas.forEach(obra => {
+            // Usamos o campo obra_status para a cor e o progresso
+            const cor = obterCorStatusObra(obra.obra_status);
+            
             divObras.innerHTML += `
-              <div onclick="abrirEdicaoObra(${obra.id})" class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:border-blue-400 hover:shadow-md transition group">
-                <div class="flex justify-between items-start mb-1">
-                  <h3 class="text-sm font-bold text-gray-800 group-hover:text-blue-600 transition w-3/4 leading-tight">${obra.titulo}</h3>
-                  <span class="px-2 py-1 text-[10px] font-bold rounded-lg uppercase ${cor}">${obra.status}</span>
+              <div onclick="abrirDetalheObra(${obra.id})" class="bg-white rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:border-blue-400 hover:shadow-md transition overflow-hidden group">
+                <div class="h-24 w-full relative overflow-hidden bg-gray-200">
+                   <img src="${obra.obra_imagem}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="Foto da Obra">
+                   <div class="absolute top-2 right-2 px-2 py-1 text-[9px] font-black rounded-lg uppercase ${cor} shadow-sm border-0 backdrop-blur-md bg-opacity-90">${obra.obra_status}</div>
                 </div>
-                <div class="text-[11px] text-gray-500 mb-2 flex items-center justify-between">
-                  <div class="flex items-center gap-3">
-                    <span>📍 ${obra.local}</span>
-                    <span>📅 ${obra.data.split('-').reverse().join('/')}</span>
+                <div class="p-4">
+                  <h3 class="text-sm font-bold text-gray-800 mb-1 leading-tight">${obra.obra_titulo}</h3>
+                  <div class="text-[10px] text-gray-500 mb-3 flex items-center gap-2">
+                    <span>📍 Praça vinculada ao item: ${obra.nome}</span>
                   </div>
-                  <button onclick="voarParaObra(${obra.lon}, ${obra.lat}, event)" class="bg-blue-100 hover:bg-blue-600 hover:text-white text-blue-700 text-[10px] font-bold px-2 py-1 rounded transition" title="Voar até a obra">
-                    Ir
-                  </button>
+                  
+                  <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200 mb-1">
+                    <div class="bg-blue-500 h-full rounded-full transition-all duration-500" style="width: ${obra.obra_progresso}%"></div>
+                  </div>
+                  <div class="flex justify-between items-center text-[10px] font-bold text-gray-500">
+                    <span>${obra.obra_progresso}% Concluído</span>
+                    <span class="text-blue-600">Ver detalhes →</span>
+                  </div>
                 </div>
-                <p class="text-xs text-gray-600 mb-3 line-clamp-2">${obra.descricao}</p>
-                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200">
-                  <div class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: ${obra.porcentagem}%"></div>
-                </div>
-                <p class="text-[10px] text-right mt-1 font-bold text-gray-500">${obra.porcentagem}% Concluído</p>
               </div>
             `;
           });
         };
 
-        window.abrirEdicaoObra = function(id) {
-          const obra = window.bancoDeDadosObras.find(o => o.id === id);
-          if(obra) {
-            document.getElementById('tela-lista-obras').classList.add('hidden');
-            document.getElementById('tela-edicao-obra').classList.remove('hidden');
+        window.abrirDetalheObra = function(id) {
+          // A MÁGICA 1: Busca direto no banco central de itens
+          const obra = window.bancoDeDadosItens.find(i => i.id === id);
+          if(!obra) return;
 
-            document.getElementById('edit-obra-id').value = obra.id;
-            document.getElementById('edit-obra-titulo').value = obra.titulo;
-            document.getElementById('edit-obra-status').value = obra.status;
-            document.getElementById('edit-obra-progresso').value = obra.porcentagem;
-            document.getElementById('edit-obra-data').value = obra.data;
-            document.getElementById('edit-obra-desc').value = obra.descricao;
+          document.getElementById('tela-lista-obras').classList.add('hidden');
+          document.getElementById('tela-detalhe-obra').classList.remove('hidden');
+
+          const cor = obterCorStatusObra(obra.obra_status);
+          const pracaNome = window.todasAsPracas.find(p => p.idOficial === obra.praca)?.nome || "Praça Desconhecida";
+
+          // Formata a data (Milissegundos da Nuvem -> dd/mm/yyyy)
+          const formataData = (epoch) => {
+             if(!epoch) return "";
+             const d = new Date(epoch);
+             return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0].split('-').reverse().join('/');
+          };
+
+          document.getElementById('conteudo-detalhe-obra').innerHTML = `
+            <img src="${obra.obra_imagem}" class="w-full h-40 object-cover rounded-xl shadow-sm border border-gray-200 mb-4">
+            <div>
+              <span class="px-2 py-1 text-[10px] font-black rounded-lg uppercase ${cor} mb-2 inline-block border">${obra.obra_status}</span>
+              <h2 class="text-xl font-bold text-gray-800 leading-tight mb-1">${obra.obra_titulo}</h2>
+              <p class="text-xs font-semibold text-gray-500 mb-4 flex items-center gap-1">📍 ${pracaNome}</p>
+            </div>
+            <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm">
+              <h3 class="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-3">Resumo Contratual</h3>
+              <div class="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
+                <div><span class="block text-[9px] text-gray-500 font-bold uppercase">Orçamento</span><span class="font-bold text-gray-800">R$ ${obra.obra_orcamento || 0}</span></div>
+                <div><span class="block text-[9px] text-gray-500 font-bold uppercase">Empreiteira</span><span class="font-bold text-gray-800 truncate" title="${obra.obra_empreiteira}">${obra.obra_empreiteira}</span></div>
+                <div><span class="block text-[9px] text-gray-500 font-bold uppercase">Início</span><span class="font-medium text-gray-700">${formataData(obra.obra_inicio)}</span></div>
+                <div><span class="block text-[9px] text-gray-500 font-bold uppercase">Prazo / Fim</span><span class="font-medium text-gray-700">${formataData(obra.obra_fim)}</span></div>
+              </div>
+            </div>
+            <div>
+              <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Escopo do Projeto</h3>
+              <p class="text-xs text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">${obra.obra_desc}</p>
+            </div>
+            <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+               <div class="flex justify-between items-center mb-2">
+                 <span class="text-xs font-bold text-gray-800">Progresso Físico</span>
+                 <span class="text-sm font-black text-blue-600">${obra.obra_progresso}%</span>
+               </div>
+               <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200">
+                 <div class="bg-blue-500 h-full rounded-full transition-all duration-1000" style="width: ${obra.obra_progresso}%"></div>
+               </div>
+            </div>
+          `;
+          
+          // LIGA OS BOTÕES PARA O ITEM CORRETO
+          document.getElementById('btn-editar-obra-ativa').onclick = function() { window.abrirFormularioObra(id); };
+          document.getElementById('btn-deletar-obra-ativa').onclick = function() { window.deletarObra(id); };
+
+          const pracaGeo = window.todasAsPracas.find(p => p.idOficial === obra.praca);
+          if (pracaGeo && pracaGeo.geometriaPoligono) {
+            view.whenLayerView(pracasLayer).then(function(layerView) {
+              layerView.filter = { geometry: pracaGeo.geometriaPoligono, spatialRelationship: "intersects" };
+              view.goTo({ target: pracaGeo.geometriaPoligono, tilt: 55, zoom: 18.5 }, { duration: 2500 });
+            });
           }
         };
 
         window.voltarParaListaObras = function() {
           document.getElementById('tela-lista-obras').classList.remove('hidden');
-          document.getElementById('tela-edicao-obra').classList.add('hidden');
+          document.getElementById('tela-detalhe-obra').classList.add('hidden');
+          document.getElementById('tela-formulario-obra').classList.add('hidden');
+          
+          // --- MÁGICA 3D: Remove o isolamento e volta a mostrar a cidade toda ---
+          view.whenLayerView(pracasLayer).then(function(layerView) {
+            layerView.filter = null;
+          });
+        };
+        // --- FUNÇÕES DE EDIÇÃO E CRIAÇÃO DE OBRAS ---
+        window.preencherSelectPracas = function() {
+          const select = document.getElementById('form-obra-praca');
+          select.innerHTML = '<option value="">Selecione uma Praça...</option>';
+          // Usa a variável global de praças para preencher o formulário
+          window.todasAsPracas.forEach(p => {
+            select.innerHTML += `<option value="${p.idOficial}" data-nome="${p.nome}" data-lon="${p.lon}" data-lat="${p.lat}">${p.nome}</option>`;
+          });
         };
 
-        window.salvarEdicaoObra = function() {
-          const id = parseInt(document.getElementById('edit-obra-id').value);
-          const obra = window.bancoDeDadosObras.find(o => o.id === id);
+        window.abrirFormularioObra = function(idObra = null) {
+          document.getElementById('tela-lista-obras').classList.add('hidden');
+          document.getElementById('tela-detalhe-obra').classList.add('hidden');
+          document.getElementById('tela-formulario-obra').classList.remove('hidden');
           
-          if(obra) {
-            obra.titulo = document.getElementById('edit-obra-titulo').value;
-            obra.status = document.getElementById('edit-obra-status').value;
-            obra.porcentagem = document.getElementById('edit-obra-progresso').value;
-            obra.data = document.getElementById('edit-obra-data').value;
-            obra.descricao = document.getElementById('edit-obra-desc').value;
+          window.preencherSelectPracas();
+
+          if (idObra) {
+            // MODO EDIÇÃO
+            document.getElementById('titulo-formulario-obra').innerText = "Editar Obra";
+            // A MÁGICA 2: Lê do banco principal
+            const obra = window.bancoDeDadosItens.find(o => o.id === idObra);
             
-            voltarParaListaObras();
-            renderizarPainelObras(); // Atualiza painel de obras
-            
-            // Se a obra for da mesma praça que está aberta no inventário, atualiza lá também!
-            if(pracaAtivaId === obra.praca) {
-              atualizarInterfaceEMapa();
-            }
+            // Reverte a data pro input type="date" (yyyy-mm-dd)
+            const formataDataInput = (epoch) => {
+               if(!epoch) return "";
+               const d = new Date(epoch);
+               return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+            };
+
+            document.getElementById('form-obra-id').value = obra.id;
+            document.getElementById('form-obra-praca').value = obra.praca;
+            document.getElementById('form-obra-titulo').value = obra.obra_titulo;
+            document.getElementById('form-obra-imagem').value = obra.obra_imagem;
+            document.getElementById('form-obra-empreiteira').value = obra.obra_empreiteira;
+            document.getElementById('form-obra-orcamento').value = obra.obra_orcamento;
+            document.getElementById('form-obra-inicio').value = formataDataInput(obra.obra_inicio);
+            document.getElementById('form-obra-fim').value = formataDataInput(obra.obra_fim);
+            document.getElementById('form-obra-status').value = obra.obra_status;
+            document.getElementById('form-obra-progresso').value = obra.obra_progresso;
+            document.getElementById('form-obra-desc').value = obra.obra_desc;
+          } else {
+            // MODO CRIAÇÃO (Limpa tudo)
+            document.getElementById('titulo-formulario-obra').innerText = "Nova Obra";
+            document.getElementById('form-obra-id').value = "";
+            document.getElementById('form-obra-praca').value = "";
+            document.getElementById('form-obra-titulo').value = "";
+            document.getElementById('form-obra-imagem').value = "";
+            document.getElementById('form-obra-empreiteira').value = "";
+            document.getElementById('form-obra-orcamento').value = "";
+            document.getElementById('form-obra-inicio').value = "";
+            document.getElementById('form-obra-fim').value = "";
+            document.getElementById('form-obra-status').value = "Planejado";
+            document.getElementById('form-obra-progresso').value = "0";
+            document.getElementById('form-obra-desc').value = "";
           }
         };
 
-        // Chama a função uma vez no início para deixar a lista de obras já montada
-        renderizarPainelObras();
+        window.salvarObraNoBanco = function() {
+          const idCampo = document.getElementById('form-obra-id').value;
+          const selectPraca = document.getElementById('form-obra-praca');
+          const optionSelecionada = selectPraca.options[selectPraca.selectedIndex];
+          
+          if (!optionSelecionada.value) { alert("Selecione uma praça!"); return; }
+
+          let orcamentoLimpo = parseFloat(document.getElementById('form-obra-orcamento').value.toString().replace(/\./g, '').replace(',', '.')) || 0;
+          const dataInicioStr = document.getElementById('form-obra-inicio').value;
+          const dataFimStr = document.getElementById('form-obra-fim').value;
+          
+          const atributosEdicao = {
+              praca_id: optionSelecionada.value,
+              nome: optionSelecionada.getAttribute('data-nome'), 
+              arquivo_glb: "obra_em_andamento", 
+              status: "OK", 
+              obra_titulo: document.getElementById('form-obra-titulo').value,
+              obra_imagem: document.getElementById('form-obra-imagem').value,
+              obra_empreiteira: document.getElementById('form-obra-empreiteira').value,
+              obra_orcamento: orcamentoLimpo,
+              obra_inicio: dataInicioStr ? new Date(dataInicioStr).getTime() : null,
+              obra_fim: dataFimStr ? new Date(dataFimStr).getTime() : null,
+              obra_status: document.getElementById('form-obra-status').value,
+              obra_progresso: parseInt(document.getElementById('form-obra-progresso').value) || 0,
+              obra_desc: document.getElementById('form-obra-desc').value
+          };
+
+          if (idCampo) {
+            // --- MODO EDIÇÃO ---
+            const idInt = parseInt(idCampo);
+            atributosEdicao[window.camadaItensNuvem.objectIdField || "OBJECTID"] = idInt;
+            
+            // Atualiza na memória local da lista
+            const index = window.bancoDeDadosItens.findIndex(i => i.id === idInt);
+            if(index !== -1) { 
+                window.bancoDeDadosItens[index] = { ...window.bancoDeDadosItens[index], ...atributosEdicao };
+            }
+
+            window.camadaItensNuvem.applyEdits({ updateFeatures: [{ attributes: atributosEdicao }] })
+                .then(() => { window.renderizarPainelObras(); window.voltarParaListaObras(); })
+                .catch(err => console.error(err));
+
+          } else {
+            // --- MODO CRIAÇÃO ---
+            const graphicNovo = new Graphic({
+                geometry: { type: "point", longitude: parseFloat(optionSelecionada.getAttribute('data-lon')), latitude: parseFloat(optionSelecionada.getAttribute('data-lat')), spatialReference: { wkid: 4326 } },
+                attributes: atributosEdicao
+            });
+
+            window.camadaItensNuvem.applyEdits({ addFeatures: [graphicNovo] }).then((res) => {
+                 if (res.addFeatureResults.length > 0 && res.addFeatureResults[0].objectId) {
+                     const idOficial = res.addFeatureResults[0].objectId;
+                     const itemNovo = { ...atributosEdicao, id: idOficial, objectId: idOficial };
+                     window.bancoDeDadosItens.push(itemNovo);
+                     window.renderizarPainelObras(); 
+                     window.voltarParaListaObras();
+                 }
+            }).catch(err => console.error(err));
+          }
+        };
+                    
+        // Renderiza a lista na inicialização
+        window.renderizarPainelObras();
+
+        // Deletar obra do painel
+        window.deletarObra = function(id) {
+          if(!confirm("⚠️ Tem certeza que deseja excluir esta obra permanentemente do sistema?")) return;
+          
+          // Remove do banco de dados unificado na hora!
+          window.bancoDeDadosItens = window.bancoDeDadosItens.filter(i => i.id !== id);
+          
+          // Atualiza a Interface
+          window.voltarParaListaObras();
+          window.renderizarPainelObras();
+          if (pracaAtivaId) window.atualizarInterfaceEMapa();
+
+          // Manda a ordem de deleção pra Nuvem 
+          window.sincronizarDelecaoNuvem(id);
+        };
+
 
         // --- ATUALIZAR MAPA E LISTA LATERAL DO INVENTÁRIO (CORRIGIDO E UNIFICADO) ---
         window.atualizarInterfaceEMapa = function() {
@@ -497,9 +801,18 @@
           const divLista = document.getElementById('lista-itens-dinamica');
           divLista.innerHTML = '';
 
-          // RECUPERADO: Linha vital que filtra os itens cadastrados nesta praça ativa
-          const itensDaPraca = window.bancoDeDadosItens.filter(i => i.praca === pracaAtivaId);
+          // RECUPERADO: Linha vital que filtra os itens...
+          let itensDaPraca = window.bancoDeDadosItens.filter(i => i.praca === pracaAtivaId);
 
+          // NOVO: Aplica o filtro de status no mapa 3D (Os itens ocultos sequer serão desenhados)
+          if (window.filtroStatusAtivo !== 'Todos') {
+              itensDaPraca = itensDaPraca.filter(i => i.status === window.filtroStatusAtivo);
+          }
+          // NOVO: Aplica o filtro de visibilidade de Categoria no Mapa 3D
+          itensDaPraca = itensDaPraca.filter(i => {
+              const categoria = window.obterCategoriaItem(i.arquivo_glb);
+              return window.visibilidadeCategorias[categoria];
+          });
           // Puxa os dados oficiais de inventário do arquivo GEOJSON
           const pracaGeo = window.todasAsPracas.find(p => p.idOficial === pracaAtivaId);
 
@@ -572,7 +885,7 @@
           // LOOP: Desenha os GLBs e cria os Cards
           itensDaPraca.forEach(item => {
             
-            // 1. Desenha o seu Modelo GLB com suporte a borda de status
+            // 1. Desenha o seu Modelo GLB Oficial
             let geoItem;
             if (item.geometriaOriginal && typeof item.geometriaOriginal.clone === 'function') {
               geoItem = item.geometriaOriginal.clone();
@@ -584,81 +897,48 @@
             const modeloGrafico = new Graphic({
               geometry: geoItem, 
               attributes: { idVisual: item.id, nome: item.nome, status: item.status, escala: item.escala || 1, tipo: "modelo" },
-              // Passamos o item.status aqui no final para a função saber se desenha a borda ou não:
               symbol: criarSimboloGLB(item.arquivo_glb || 'low_poly_-_park_bench.glb', item.escala || 1, item.rotacao || 0, item.inclinacao || 0, item.status) 
             });
             graphicsLayer.add(modeloGrafico);
 
-            // 2. Monta o card com o Menu 3D embutido
-            divLista.innerHTML += `
-              <div class="bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-sm mt-3">
-                <div class="flex justify-between items-start mb-2 border-b border-gray-200 pb-2">
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-sm text-gray-800">${item.nome}</span>
-                    <button onclick="editarNomeItem(${item.id})" class="text-gray-400 hover:text-blue-600 transition" title="Editar Nome">✏️</button>
-                    <button onclick="toggleMenu3D(${item.id})" class="${idMenu3DAberto === item.id ? 'text-purple-600' : 'text-gray-400'} hover:text-purple-600 transition" title="Ajustes 3D">⚙️</button>
-                  </div>
-                  <button onclick="deletarItem(${item.id})" class="text-red-400 hover:text-red-600 transition" title="Excluir">🗑️</button>
-                </div>
-                
-                <div class="flex items-center gap-2">
-                  <button onclick="mudarStatus(${item.id})" class="text-xs font-semibold px-2 py-1 rounded-lg transition ${item.status === 'OK' ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}" title="Mudar Status">
-                    ${item.status} ↻
-                  </button>
-                  <button onclick="ativarModoMover(${item.id})" class="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition" title="Mover no Mapa">
-                    📍 Mover
-                  </button>
-                </div>
+            // 2. A MÁGICA: O PINO COM LINHA DE CHAMADA (CALLOUT)
+            if (item.status === "Necessita Conserto") {
+              // A geometria base é exatamente a mesma do objeto (no chão)
+              const geoIndicador = geoItem.clone();
 
-                <div class="${idMenu3DAberto === item.id ? 'block' : 'hidden'} mt-3 pt-3 border-t border-gray-200 space-y-3 animate-fade-in">
-                  
-                  <div class="flex flex-col gap-1 bg-white p-2 rounded border border-gray-100 shadow-sm">
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-[10px] font-bold text-gray-500">TAMANHO</span>
-                      <span class="text-[10px] text-gray-400 font-mono" id="val-escala-${item.id}">${(item.escala || 1).toFixed(2)}x</span>
-                    </div>
-                    <input type="range" min="0.1" max="5" step="0.05" value="${item.escala || 1}" 
-                           oninput="aplicarAjuste3D(${item.id}, 'escala', this.value, false)" 
-                           onchange="aplicarAjuste3D(${item.id}, 'escala', this.value, true)"
-                           class="w-full accent-purple-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                  </div>
-
-                  <div class="flex flex-col gap-1 bg-white p-2 rounded border border-gray-100 shadow-sm">
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-[10px] font-bold text-gray-500">GIRO HORIZONTAL</span>
-                      <span class="text-[10px] text-gray-400 font-mono" id="val-rotacao-${item.id}">${item.rotacao || 0}°</span>
-                    </div>
-                    <input type="range" min="0" max="360" step="1" value="${item.rotacao || 0}" 
-                           oninput="aplicarAjuste3D(${item.id}, 'rotacao', this.value, false)" 
-                           onchange="aplicarAjuste3D(${item.id}, 'rotacao', this.value, true)"
-                           class="w-full accent-blue-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                  </div>
-
-                  <div class="flex flex-col gap-1 bg-white p-2 rounded border border-gray-100 shadow-sm">
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-[10px] font-bold text-gray-500">INCLINAÇÃO NO TERRENO</span>
-                      <span class="text-[10px] text-gray-400 font-mono" id="val-inclinacao-${item.id}">${item.inclinacao || 0}°</span>
-                    </div>
-                    <input type="range" min="-90" max="90" step="1" value="${item.inclinacao || 0}" 
-                           oninput="aplicarAjuste3D(${item.id}, 'inclinacao', this.value, false)" 
-                           onchange="aplicarAjuste3D(${item.id}, 'inclinacao', this.value, true)"
-                           class="w-full accent-orange-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                  </div>
-
-                  <div class="flex flex-col gap-1 bg-white p-2 rounded border border-gray-100 shadow-sm">
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-[10px] font-bold text-gray-500">ALTURA (Elevação)</span>
-                      <span class="text-[10px] text-gray-400 font-mono" id="val-altitude-${item.id}">${(item.altitude || 0).toFixed(1)}m</span>
-                    </div>
-                    <input type="range" min="-5" max="20" step="0.1" value="${item.altitude || 0}" 
-                           oninput="aplicarAjuste3D(${item.id}, 'altitude', this.value, false)" 
-                           onchange="aplicarAjuste3D(${item.id}, 'altitude', this.value, true)"
-                           class="w-full accent-green-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                  </div>
-                </div>
-              </div>
-            `;
+              const indicadorGrafico = new Graphic({
+                geometry: geoIndicador,
+                attributes: { idVisual: item.id, tipo: "indicador" },
+                symbol: {
+                  type: "point-3d",
+                  // MÁGICA 1: Força o ícone a flutuar 50 pixels ACIMA na tela do computador
+                  verticalOffset: {
+                    screenLength: 50,
+                    maxWorldLength: 100,
+                    minWorldLength: 1
+                  },
+                  // MÁGICA 2: Desenha uma linha fina conectando o ícone voador até a base do objeto
+                  callout: {
+                    type: "line",
+                    size: 1.5,
+                    color: [239, 68, 68], // Linha vermelha
+                    border: { color: [255, 255, 255] } // Borda branca suave na linha
+                  },
+                  symbolLayers: [{
+                    type: "icon",
+                    resource: { primitive: "circle" }, 
+                    material: { color: [239, 68, 68] },
+                    outline: { color: "white", size: 0.4 },
+                    size: 12 
+                  }]
+                }
+              });
+              graphicsLayer.add(indicadorGrafico);
+            }
           });
+          // DELEGAR: Agora chamamos a nova função que cuida APENAS do menu de HTML com as sanfonas
+          const termoPesquisaSalvo = document.getElementById('input-pesquisa-itens') ? document.getElementById('input-pesquisa-itens').value : "";
+          window.renderizarHTMLInventario(termoPesquisaSalvo);
         };
 
         // --- NOVAS FUNÇÕES UNIFICADAS DE MANIPULAÇÃO 3D ---
@@ -688,20 +968,30 @@
               window.sincronizarAtualizacaoNuvem(item);
               window.atualizarInterfaceEMapa(); 
             } else {
-              // MÁGICA: Enquanto arrasta, atualiza SÓ O GRÁFICO específico na memória de vídeo, sem travar o site
-              const grafico = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id);
+              // Atualiza o Modelo 3D no mapa
+              const grafico = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id && g.attributes.tipo === "modelo");
               if (grafico) {
                  grafico.symbol = criarSimboloGLB(item.arquivo_glb, item.escala, item.rotacao, item.inclinacao || 0, item.status);
                  
-                 // Se mexer na altura, precisa recalcular a coordenada 3D
                  if (propriedade === 'altitude') {
                      const novaGeometria = grafico.geometry.clone();
                      novaGeometria.z = numVal;
                      grafico.geometry = novaGeometria;
                  }
               }
-            }
-          }
+
+              // Atualiza a Seta (Callout) ao vivo
+              const indicador = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id && g.attributes.tipo === "indicador");
+              if (indicador) {
+                 // A única coisa que importa agora é a altitude do chão. O tamanho e a flutuação são automáticos!
+                 if (propriedade === 'altitude') {
+                     const novaGeoIndicador = indicador.geometry.clone();
+                     novaGeoIndicador.z = numVal; // Apenas iguala a altitude do objeto
+                     indicador.geometry = novaGeoIndicador;
+                 }
+              }
+              }
+           }
         };
 
         // --- AÇÕES DE EDIÇÃO (CRUD) ---
@@ -758,6 +1048,8 @@
           { id: 'tennis', nome: 'Quadra de Tênis - Saibro', arquivo: 'quadra_tenis_saibro.glb', imagem: 'tenis-saibro.png' },
           { id: 'tennis2', nome: 'Quadra de Tênis - Rápida', arquivo: 'quadra_tenis_rapida.glb', imagem: 'tenis-rapida.png' },
           { id: 'cancha1', nome: 'Cancha de Bocha', arquivo: 'campo_de_bocha.glb', imagem: 'cancha.png' },
+          { id: 'volei', nome: 'Vôlei', arquivo: 'quadra_volei.glb', imagem: 'volei.png' },
+          { id: 'beachTenis', nome: 'Beach Tennis', arquivo: 'quadra_beach_tennis.glb', imagem: 'beach.png' },
           { id: 'skate1', nome: 'Pista de Skate', arquivo: 'halfpipe_skatepark_ramp_-_low_poly_baked.glb', imagem: 'skate.png' },
           { id: 'play1', nome: 'Playground Infantil', arquivo: 'playground.glb', imagem: 'playground.png' },
           { id: 'play2', nome: 'Gangorra', arquivo: 'seesaw.glb', imagem: 'playground2.png' },
@@ -770,6 +1062,217 @@
         ];
 
         let modeloEscolhidoUrl = null;
+
+        // --- NOVO SISTEMA DE INVENTÁRIO AGRUPADO (SANFONAS) ---
+        window.estadoSanfonas = {}; // Guarda quais grupos estão abertos/fechados
+
+        // --- DICIONÁRIO INTELIGENTE DE GAVETAS ---
+        window.obterNomeGaveta = function(arquivo_glb) {
+            const arq = (arquivo_glb || "").toLowerCase();
+            
+            // 1. Equipamentos base
+            if (arq.includes('bench')) return "Bancos";
+            if (arq.includes('lamp') || arq.includes('streetlight')) return "Iluminação (Postes)";
+            if (arq.includes('trash') || arq.includes('fountain')) return "Lixeiras e Bebedouros";
+            
+            // 2. Estruturas e Ambientes
+            if (arq.includes('toilet') || arq.includes('vestiario')) return "Banheiros e Vestiários";
+            if (arq.includes('statue') || arq.includes('monument')) return "Monumentos Históricos";
+            if (arq.includes('chess')) return "Mesas de Jogo (Dama/Xadrez)";
+            if (arq.includes('court') || arq.includes('sahasi') || arq.includes('bocha') || arq.includes('tenis') || arq.includes('volei') || arq.includes('beach')) return "Quadras Esportivas e Canchas";
+            if (arq.includes('skate') || arq.includes('halfpipe')) return "Pistas de Skate";
+            if (arq.includes('play') || arq.includes('seesaw') || arq.includes('slide')) return "Playground Infantil";
+            if (arq.includes('calisthenics') || arq.includes('gym') || arq.includes('academia')) return "Academia ao Ar Livre";
+            if (arq.includes('barbecue') || arq.includes('churrasqueira')) return "Churrasqueiras";
+            if (arq.includes('pergola') || arq.includes('estar')) return "Áreas de Estar e Pergolados";
+            
+            // 3. O FILTRO DE ÁRVORE FICA POR ÚLTIMO (Evita que s-tree-t caia aqui)
+            if (arq.includes('tree')) return "Árvores e Vegetação";
+            
+            return "Outros Equipamentos";
+        };
+
+        window.renderizarHTMLInventario = function(termoPesquisa = "") {
+          const divLista = document.getElementById('lista-itens-dinamica');
+          divLista.innerHTML = '';
+          
+          let itens = window.bancoDeDadosItens.filter(i => i.praca === pracaAtivaId);
+
+          if (window.filtroStatusAtivo !== 'Todos') {
+              itens = itens.filter(i => i.status === window.filtroStatusAtivo);
+          }
+
+          itens = itens.filter(i => {
+              const categoria = window.obterCategoriaItem(i.arquivo_glb);
+              return window.visibilidadeCategorias[categoria];
+          });
+          
+          if(termoPesquisa.trim() !== "") {
+              const termo = termoPesquisa.toLowerCase();
+              itens = itens.filter(i => i.nome.toLowerCase().includes(termo) || i.status.toLowerCase().includes(termo));
+          }
+
+          // AQUI ESTÁ O SEU AGRUPAMENTO, USANDO A INTELIGÊNCIA GLOBAL
+          const grupos = {};
+          itens.forEach(item => {
+              const nomeGrupo = window.obterNomeGaveta(item.arquivo_glb);
+              if(!grupos[nomeGrupo]) grupos[nomeGrupo] = [];
+              grupos[nomeGrupo].push(item);
+          });
+
+          // Monta o HTML com as Sanfonas
+          for(const [nomeGrupo, itensGrupo] of Object.entries(grupos)) {
+              const isAberto = termoPesquisa.trim() !== "" ? true : !!window.estadoSanfonas[nomeGrupo];
+              const iconeSeta = isAberto ? '▼' : '▶';
+              const displayClasses = isAberto ? 'block' : 'hidden';
+
+              let htmlGrupo = `
+              <div class="mb-3 border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                <button onclick="window.toggleGrupoInventario('${nomeGrupo}')" class="w-full flex justify-between items-center p-3 bg-green-50/50 hover:bg-green-100/50 border-b border-gray-100 transition">
+                   <span class="font-bold text-sm text-green-900 flex items-center gap-2">
+                     ${nomeGrupo} <span class="bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full">${itensGrupo.length}</span>
+                   </span>
+                   <span class="text-xs text-green-700 font-bold">${iconeSeta}</span>
+                </button>
+                <div class="${displayClasses} p-2 bg-gray-50 space-y-2 max-h-[40vh] overflow-y-auto">
+              `;
+
+              itensGrupo.forEach(item => {
+                  htmlGrupo += `
+                    <div id="card-item-${item.id}" class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm transition-all duration-300">
+                      
+                      <!-- AQUI ESTÁ A CHAMADA DA CÂMERA (focarObjetoNoMapa) -->
+                      <div class="flex justify-between items-start mb-2 border-b border-gray-100 pb-2">
+                        <div class="flex items-center gap-2 flex-1 cursor-pointer group" onclick="window.focarObjetoNoMapa(${item.id})" title="Ver no Mapa">
+                          <span class="font-bold text-xs text-gray-800 group-hover:text-purple-600 transition">${item.nome}</span>
+                          <span class="text-[9px] text-gray-400 bg-gray-100 px-1.5 rounded">📍 Localizar</span>
+                        </div>
+                        <div class="flex gap-2 shrink-0 ml-2">
+                            <button onclick="editarNomeItem(${item.id})" class="text-gray-400 hover:text-blue-600 transition" title="Editar Nome">✏️</button>
+                            <button onclick="toggleMenu3D(${item.id})" class="${idMenu3DAberto === item.id ? 'text-purple-600' : 'text-gray-400'} hover:text-purple-600 transition" title="Ajustes 3D">⚙️</button>
+                            <button onclick="deletarItem(${item.id})" class="text-red-400 hover:text-red-600 transition" title="Excluir">🗑️</button>
+                        </div>
+                      </div>
+                      
+                      <div class="flex items-center gap-2">
+                        <button onclick="mudarStatus(${item.id})" class="text-[10px] font-bold px-2 py-1 rounded-lg transition ${item.status === 'OK' ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}">${item.status} ↻</button>
+                        <button onclick="ativarModoMover(${item.id})" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition">📍 Mover</button>
+                      </div>
+
+                      <div class="${idMenu3DAberto === item.id ? 'block' : 'hidden'} mt-3 pt-3 border-t border-gray-100 space-y-2 animate-fade-in">
+                         <div class="flex flex-col gap-1 bg-gray-50 p-1.5 rounded border border-gray-100">
+                          <div class="flex justify-between items-center mb-0.5"><span class="text-[9px] font-bold text-gray-500">TAMANHO</span><span class="text-[9px] text-gray-400 font-mono" id="val-escala-${item.id}">${(item.escala || 1).toFixed(2)}x</span></div>
+                          <input type="range" min="0.1" max="5" step="0.05" value="${item.escala || 1}" oninput="aplicarAjuste3D(${item.id}, 'escala', this.value, false)" onchange="aplicarAjuste3D(${item.id}, 'escala', this.value, true)" class="w-full accent-purple-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex flex-col gap-1 bg-gray-50 p-1.5 rounded border border-gray-100">
+                          <div class="flex justify-between items-center mb-0.5"><span class="text-[9px] font-bold text-gray-500">GIRO HORIZONTAL</span><span class="text-[9px] text-gray-400 font-mono" id="val-rotacao-${item.id}">${item.rotacao || 0}°</span></div>
+                          <input type="range" min="0" max="360" step="1" value="${item.rotacao || 0}" oninput="aplicarAjuste3D(${item.id}, 'rotacao', this.value, false)" onchange="aplicarAjuste3D(${item.id}, 'rotacao', this.value, true)" class="w-full accent-blue-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex flex-col gap-1 bg-gray-50 p-1.5 rounded border border-gray-100">
+                          <div class="flex justify-between items-center mb-0.5"><span class="text-[9px] font-bold text-gray-500">INCLINAÇÃO NO TERRENO</span><span class="text-[9px] text-gray-400 font-mono" id="val-inclinacao-${item.id}">${item.inclinacao || 0}°</span></div>
+                          <input type="range" min="-90" max="90" step="1" value="${item.inclinacao || 0}" oninput="aplicarAjuste3D(${item.id}, 'inclinacao', this.value, false)" onchange="aplicarAjuste3D(${item.id}, 'inclinacao', this.value, true)" class="w-full accent-orange-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="flex flex-col gap-1 bg-gray-50 p-1.5 rounded border border-gray-100">
+                          <div class="flex justify-between items-center mb-0.5"><span class="text-[9px] font-bold text-gray-500">ALTURA (Elevação)</span><span class="text-[9px] text-gray-400 font-mono" id="val-altitude-${item.id}">${(item.altitude || 0).toFixed(1)}m</span></div>
+                          <input type="range" min="-5" max="20" step="0.1" value="${item.altitude || 0}" oninput="aplicarAjuste3D(${item.id}, 'altitude', this.value, false)" onchange="aplicarAjuste3D(${item.id}, 'altitude', this.value, true)" class="w-full accent-green-600 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                      </div>
+                    </div>
+                  `;
+              });
+
+              htmlGrupo += `</div></div>`; 
+              divLista.innerHTML += htmlGrupo;
+          }
+        };
+
+        window.toggleGrupoInventario = function(nomeGrupo) {
+          // Inverte o status de aberto/fechado na memória
+          window.estadoSanfonas[nomeGrupo] = !window.estadoSanfonas[nomeGrupo];
+          // Recarrega o HTML mantendo o texto da pesquisa (se houver)
+          const termoInput = document.getElementById('input-pesquisa-itens');
+          window.renderizarHTMLInventario(termoInput ? termoInput.value : "");
+        };
+
+        window.filtrarItensInventario = function(termo) {
+          // Como essa função só altera o HTML, o mapa 3D não vai piscar nem recarregar os modelos atoa!
+          window.renderizarHTMLInventario(termo);
+        };
+
+        // --- LÓGICA DO FILTRO DE STATUS ---
+        window.filtroStatusAtivo = 'Todos'; // Inicia mostrando tudo
+
+        window.aplicarFiltroStatus = function(status) {
+          window.filtroStatusAtivo = status;
+          
+          const btnTodos = document.getElementById('btn-filtro-todos');
+          const btnOk = document.getElementById('btn-filtro-ok');
+          const btnConserto = document.getElementById('btn-filtro-conserto');
+
+          // 1. Desliga todos (Visual inativo padrão)
+          const classeInativo = "bg-white text-gray-500 border-gray-200";
+          btnTodos.className = `flex-1 text-[10px] font-bold py-1.5 rounded-full transition border hover:bg-gray-100 ${classeInativo}`;
+          btnOk.className = `flex-1 text-[10px] font-bold py-1.5 rounded-full transition border hover:bg-green-50 hover:text-green-700 ${classeInativo}`;
+          btnConserto.className = `flex-1 text-[10px] font-bold py-1.5 rounded-full transition border hover:bg-red-50 hover:text-red-700 ${classeInativo}`;
+
+          // 2. Liga apenas o selecionado
+          if (status === 'Todos') {
+            btnTodos.className = "flex-1 text-[10px] font-bold py-1.5 rounded-full transition bg-gray-800 text-white shadow-sm border border-gray-800";
+          } else if (status === 'OK') {
+            btnOk.className = "flex-1 text-[10px] font-bold py-1.5 rounded-full transition bg-green-100 text-green-700 shadow-sm border border-green-200";
+          } else if (status === 'Necessita Conserto') {
+            btnConserto.className = "flex-1 text-[10px] font-bold py-1.5 rounded-full transition bg-red-100 text-red-700 shadow-sm border border-red-200";
+          }
+
+          // 3. Manda redesenhar a tela inteira (Mapa e Lista)
+          window.atualizarInterfaceEMapa();
+        };
+
+        // --- LÓGICA DO FILTRO DE VISIBILIDADE 3D (CATEGORIAS) ---
+        window.visibilidadeCategorias = { vegetacao: true, mobiliario: true, estrutura: true };
+
+        // Inteligência para classificar os itens automaticamente pelo nome do arquivo GLB
+        window.obterCategoriaItem = function(arquivo_glb) {
+          const arq = (arquivo_glb || "").toLowerCase();
+          
+          if (arq.includes('tree')) return 'vegetacao';
+          
+          if (arq.includes('court') || arq.includes('sahasi') || arq.includes('skate') || 
+              arq.includes('play') || arq.includes('seesaw') || arq.includes('slide') || 
+              arq.includes('gym') || arq.includes('calisthenics') || arq.includes('academia') || 
+              arq.includes('barbecue') || arq.includes('pergola') || arq.includes('bocha') ||
+              arq.includes('chess') || arq.includes('tenis')) {
+            return 'estrutura';
+          }
+          
+          return 'mobiliario'; // Se não for árvore nem estrutura gigante, é mobiliário padrão
+        };
+
+        window.toggleVisibilidade = function(categoria) {
+          // Inverte o estado da categoria (Liga/Desliga)
+          window.visibilidadeCategorias[categoria] = !window.visibilidadeCategorias[categoria];
+          
+          const btn = document.getElementById(`btn-vis-${categoria}`);
+          const estaAtivo = window.visibilidadeCategorias[categoria];
+          
+          // Estilo visual: Se desligado, fica cinza apagado e com um risco no meio
+          if (categoria === 'vegetacao') {
+            btn.className = estaAtivo 
+              ? "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 shadow-sm flex items-center justify-center gap-1" 
+              : "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 line-through opacity-70 flex items-center justify-center gap-1";
+          } else if (categoria === 'mobiliario') {
+            btn.className = estaAtivo 
+              ? "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 shadow-sm flex items-center justify-center gap-1" 
+              : "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 line-through opacity-70 flex items-center justify-center gap-1";
+          } else if (categoria === 'estrutura') {
+            btn.className = estaAtivo 
+              ? "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200 shadow-sm flex items-center justify-center gap-1" 
+              : "flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 line-through opacity-70 flex items-center justify-center gap-1";
+          }
+          
+          // Manda o mapa e a lista se atualizarem!
+          window.atualizarInterfaceEMapa();
+        };
 
         // --- FUNÇÕES DO MODAL ---
         window.abrirCatalogoModelos = function() {
@@ -827,7 +1330,7 @@
           document.getElementById('msg-instrucao').classList.remove('hidden');
         };
 
-        // --- ATUALIZAÇÃO DA FUNÇÃO QUE DESENHA O ITEM ---
+      // --- FUNÇÃO QUE DESENHA O ITEM ---
         function criarSimboloGLB(arquivo, escala = 1, rotacao = 0, inclinacao = 0, status = "OK") {
           const caminhoArquivo = arquivo.includes('/') ? arquivo : "modelos/" + arquivo;
           
@@ -835,17 +1338,14 @@
             type: "object",
             resource: { href: "./" + caminhoArquivo },
             height: 3 * escala, 
-            heading: rotacao,     // Giro (Z)
-            tilt: inclinacao      // Inclinação (X/Y)
+            heading: rotacao,
+            tilt: inclinacao
           };
 
-          // MÁGICA: Se precisa de conserto, aplica uma borda (arestas) vermelha ao redor do modelo 3D
+          // O FANTASMA CINZA: Mescla a textura original com um cinza translúcido
           if (status === "Necessita Conserto") {
-            configuracaoObjeto.edges = {
-              type: "solid",
-              color: "#ef4444", // Vermelho
-              size: 2.5       // Espessura da borda
-            };
+            // [R, G, B, Opacidade]. O ArcGIS mistura isso com a textura da madeira/folhas!
+            configuracaoObjeto.material = { color: [107, 114, 128, 0.80] }; 
           }
 
           return {
@@ -982,8 +1482,43 @@
             atualizarInterfaceEMapa();
           }
           else {
-            // DETECTA CLIQUE NO POLÍGONO DA PRAÇA OU FORA DELE
             view.hitTest(event).then(function(response) {
+              
+              // 1. CLIQUE NO OBJETO 3D: Apenas scrolla e destaca o card correspondente (SEM abrir a engrenagem)
+              const objetoClicado = response.results.find(res => res.graphic.layer === graphicsLayer && res.graphic.attributes && res.graphic.attributes.idVisual);
+
+              if (objetoClicado) {
+                  const idObj = objetoClicado.graphic.attributes.idVisual;
+                  const itemBanco = window.bancoDeDadosItens.find(i => i.id === idObj);
+
+                  if (itemBanco) {
+                      const nomeGrupo = window.obterNomeGaveta(itemBanco.arquivo_glb);
+                      
+                      if (document.getElementById('content-inventario').classList.contains('hidden')) {
+                          document.getElementById('btn-inventario').click();
+                      }
+
+                      // Abre a sanfona correta, se estiver fechada
+                      if (!window.estadoSanfonas[nomeGrupo]) {
+                          window.estadoSanfonas[nomeGrupo] = true;
+                          window.atualizarInterfaceEMapa(); // Redesenha a lista para abrir a gaveta
+                      }
+
+                      // Rola a tela até o card correspondente e aplica o efeito visual de foco (sem abrir sliders)
+                      setTimeout(() => {
+                          const card = document.getElementById(`card-item-${idObj}`);
+                          if (card) {
+                              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              card.classList.add('border-purple-500', 'ring-2', 'ring-purple-300', 'bg-purple-50/50');
+                              setTimeout(() => card.classList.remove('border-purple-500', 'ring-2', 'ring-purple-300', 'bg-purple-50/50'), 2500);
+                          }
+                      }, 150); // delay para dar tempo de o HTML da sanfona abrir, se precisou
+
+                      return; // Impede que o clique seja considerado um clique na "grama"
+                  }
+              }
+
+              // 2. CLIQUE NA PRAÇA (Abre o Inventário da Praça inteira)
               const pracaClicadaHit = response.results.find(
                 (resultado) => resultado.graphic.layer && resultado.graphic.layer.id === "pracas-parques"
               );
@@ -992,7 +1527,6 @@
                 const atributos = pracaClicadaHit.graphic.attributes;
                 const infoPraca = extrairIdENomePraca(atributos);
                 
-                // Se clicou na praça que JÁ ESTÁ selecionada, não faz nada
                 if (infoPraca.id === pracaAtivaId) return;
 
                 let lonVoo = event.mapPoint.longitude;
@@ -1009,7 +1543,7 @@
                   document.getElementById('btn-inventario').click();
                 }
               } else {
-                // CLICOU FORA: Limpa a praça ativa e volta todas à tela
+                // CLIQUE FORA (Volta para a lista global de praças)
                 if (pracaAtivaId !== null) {
                   window.voltarParaListaPracas();
                 }
@@ -1227,7 +1761,7 @@ window.minimizarPainel = function() {
   // BOTÕES INDIVIDUAIS: Ganham o verde mais forte quando estão flutuando no mapa
   buttons.forEach(btn => {
     btn.classList.remove('text-gray-400', 'border-transparent', 'bg-transparent');
-    btn.classList.add('bg-[#1cca5b]', 'text-white', 'shadow-md', 'border-green-700', 'backdrop-blur-sm');
+    btn.classList.add('bg-[#15803d]', 'text-white', 'shadow-md', 'border-green-700', 'backdrop-blur-sm');
   });
 };
 
@@ -1239,3 +1773,21 @@ btnInventario.addEventListener('click', () => switchTab(btnInventario, contentIn
 
 // Abre a introdução por padrão ao carregar a página
 switchTab(btnIntro, contentIntro);
+
+// --- FOCO BIDIRECIONAL (Card -> Mapa) ---
+        window.focarObjetoNoMapa = function(id) {
+          // Acha o gráfico no mapa 3D
+          const graphic = graphicsLayer.graphics.find(g => g.attributes && g.attributes.idVisual === id && g.attributes.tipo === "modelo");
+          
+          if (graphic) {
+            // Voa a câmera para pertinho do objeto, focando nele de cima
+            view.goTo({ target: graphic, zoom: 21, tilt: 60 }, { duration: 1500 });
+
+            // Pisca o card de roxo para o usuário saber que conectou
+            const card = document.getElementById(`card-item-${id}`);
+            if (card) {
+                card.classList.add('border-purple-500', 'ring-2', 'ring-purple-300');
+                setTimeout(() => card.classList.remove('border-purple-500', 'ring-2', 'ring-purple-300'), 2000);
+            }
+          }
+        };
