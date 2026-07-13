@@ -15,3 +15,105 @@ color: #4b5563; /* text-gray-600 */
 background-color: #f9fafb; /* hover:bg-gray-50 */
 color: #15803d; /* hover:text-green-700 */
 }
+
+/* ==========================================================================
+   RESPONSIVIDADE (MOBILE & TABLETS)
+   Ativado em telas menores que 900px
+   ========================================================================== */
+@media (max-width: 900px) {
+    /* 1. CABEÇALHO (Header) */
+    header {
+        height: 60px !important; /* Diminui a altura */
+        padding: 0 12px !important;
+    }
+    
+    /* Esconde os textos grandes da prefeitura e secretaria para não quebrar 
+    header span {
+        display: none !important;
+    }
+    */
+    /* Ajusta os logos */
+    header img {
+        height: 40px !important;
+        width: auto !important;
+    }
+
+    
+
+
+    /* 2. GAVETA PRINCIPAL (Onde fica o conteúdo) */
+    #wrapper-gaveta {
+        width: 260px !important; /* Fica fininho, liberando o lado esquerdo do mapa */
+        right: 55px !important; 
+        top: 75px !important; 
+        bottom: auto !important; /* "Solta" a gaveta do rodapé da tela */
+        max-height: 60vh !important; /* Ocupa só 60% da altura da tela, liberando o mapa embaixo */
+    }
+
+    /* Reduzimos o espaçamento interno para o conteúdo caber na gaveta menor */
+    #wrapper-gaveta .p-6, 
+    #wrapper-gaveta .p-8 {
+        padding: 14px !important;
+    }
+
+    /* 3. BARRA LATERAL (Os ícones flutuantes) */
+    #barra-lateral {
+        width: 45px !important;
+        right: 5px !important;
+    }
+    
+    /* A barra lateral acompanha exatamente a mesma altura da gaveta */
+    #barra-lateral.top-24 {
+        top: 75px !important;
+        bottom: auto !important;
+        max-height: 60vh !important;
+    }
+
+
+    /* 4. SLIDER INFERIOR (Mapa vs Satélite) */
+    /* Pegando a div container do slider pelo posicionamento */
+    .bottom-8.left-1\/2 {
+        bottom: 20px !important;
+        padding: 8px 16px !important;
+        width: 90% !important;
+        max-width: 320px !important;
+    }
+    
+    #slider-mescla-mapa {
+        width: 120px !important;
+    }
+
+
+    /* 5. FORMULÁRIOS (Gestão de Obras) */
+    /* Transforma os grids de 2 colunas em 1 coluna (um campo embaixo do outro) */
+    .grid-cols-2 {
+        grid-template-columns: 1fr !important;
+    }
+    
+    /* Evita que modais/telas de fundo fiquem cortados */
+    .max-h-\[65vh\], .max-h-\[70vh\] {
+        max-height: 75vh !important;
+    }
+}
+
+@media (max-width: 1250px) {
+    /* Esconde apenas o texto auxiliar mais longo da secretaria para garantir o layout */
+    header .text-green-200.tracking-widest {
+        display: none !important;
+    }
+}
+/*
+@media (max-width: 900px) {
+    /* Em tablets, escondemos o nome completo e deixamos só os logos e a busca  
+    header .hidden.md\:block {
+        display: none !important;
+    }
+}*/
+
+@media (min-width: 901px) and (max-width: 1480px) {
+    /* Apenas eleva o limite inferior da gaveta e da barra para não baterem no slider */
+    #wrapper-gaveta,
+    #barra-lateral.bottom-6 {
+        bottom: 90px !important; 
+    }
+}
