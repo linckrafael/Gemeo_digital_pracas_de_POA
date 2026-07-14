@@ -16,84 +16,102 @@ background-color: #f9fafb; /* hover:bg-gray-50 */
 color: #15803d; /* hover:text-green-700 */
 }
 
+/* Garante que a linha desenhada fora do card seja vista */
+#custom-tooltip {
+  overflow: visible !important; 
+}
+
+/* 1. Haste Vertical (apontando do meio do rodapé do card para o objeto) */
+#custom-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: -30px; /* Mesmo tamanho que subtraímos no JS (telaCoord.y - 30) */
+  left: 50%; /* Bem no centro horizontal do card */
+  width: 2px; /* Espessura da linha */
+  height: 30px; /* Comprimento da linha */
+  background-color: #22c55e;
+  transform: translateX(-50%); /* Centraliza na própria espessura */
+  z-index: -1;
+}
+
+/* 2. Bolinha cravada no modelo 3D */
+#custom-tooltip::after {
+  content: '';
+  position: absolute;
+  /* Desce o tamanho da linha (-30px) + ajusta o raio da bolinha para o pixel bater cravado */
+  bottom: -34px; 
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  background-color: #15803d;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
 /* ==========================================================================
    RESPONSIVIDADE (MOBILE & TABLETS)
    Ativado em telas menores que 900px
    ========================================================================== */
 @media (max-width: 900px) {
-    /* 1. CABEÇALHO (Header) */
+    /* 1. CABEÇALHO (Header) blindado */
     header {
-        height: 60px !important; /* Diminui a altura */
-        padding: 0 12px !important;
+        height: 65px !important; 
+        padding: 0 8px !important;
+        overflow: hidden !important; /* MÁGICA: Impede que qualquer coisa vaze da tela */
     }
-    
-    /* Esconde os textos grandes da prefeitura e secretaria para não quebrar 
-    header span {
-        display: none !important;
-    }
-    */
-    /* Ajusta os logos */
-    header img {
-        height: 40px !important;
+    /* Logo da Prefeitura (Lado esquerdo) 
+    header div:first-child img {
+        height: 54px !important; 
         width: auto !important;
+        max-width: 145px !important; 
+        object-fit: contain !important;
     }
-
-    
-
-
-    /* 2. GAVETA PRINCIPAL (Onde fica o conteúdo) */
+*/
+    /* Logo da DAV (Lado direito) 
+    header div:last-child img {
+        height: 35px !important; 
+        width: auto !important;
+        max-width: 50px !important;
+        object-fit: contain !important;
+    }
+*/
+    /* 2. GAVETA PRINCIPAL */
     #wrapper-gaveta {
-        width: 260px !important; /* Fica fininho, liberando o lado esquerdo do mapa */
-        right: 55px !important; 
+        width: 260px !important; 
+        right: 47px !important; /* CORREÇÃO FINAL: 45px (botões) + 2px (margem) = 47px exatos */
         top: 75px !important; 
-        bottom: auto !important; /* "Solta" a gaveta do rodapé da tela */
-        max-height: 60vh !important; /* Ocupa só 60% da altura da tela, liberando o mapa embaixo */
+        bottom: 80px !important; 
+        max-height: none !important; 
     }
 
-    /* Reduzimos o espaçamento interno para o conteúdo caber na gaveta menor */
-    #wrapper-gaveta .p-6, 
-    #wrapper-gaveta .p-8 {
-        padding: 14px !important;
-    }
+    /* Reduz espaçamento interno da gaveta no mobile */
+    #wrapper-gaveta .p-6, #wrapper-gaveta .p-8 { padding: 14px !important; }
 
-    /* 3. BARRA LATERAL (Os ícones flutuantes) */
+    /* 3. BARRA LATERAL (Botões) */
     #barra-lateral {
         width: 45px !important;
-        right: 5px !important;
+        right: 2px !important;
     }
-    
-    /* A barra lateral acompanha exatamente a mesma altura da gaveta */
     #barra-lateral.top-24 {
         top: 75px !important;
-        bottom: auto !important;
-        max-height: 60vh !important;
+        bottom: 80px !important;
+        max-height: none !important;
     }
 
-
     /* 4. SLIDER INFERIOR (Mapa vs Satélite) */
-    /* Pegando a div container do slider pelo posicionamento */
     .bottom-8.left-1\/2 {
         bottom: 20px !important;
         padding: 8px 16px !important;
         width: 90% !important;
         max-width: 320px !important;
     }
-    
-    #slider-mescla-mapa {
-        width: 120px !important;
-    }
+    #slider-mescla-mapa { width: 120px !important; }
 
-
-    /* 5. FORMULÁRIOS (Gestão de Obras) */
-    /* Transforma os grids de 2 colunas em 1 coluna (um campo embaixo do outro) */
-    .grid-cols-2 {
-        grid-template-columns: 1fr !important;
-    }
-    
-    /* Evita que modais/telas de fundo fiquem cortados */
-    .max-h-\[65vh\], .max-h-\[70vh\] {
-        max-height: 75vh !important;
-    }
+    /* 5. FORMULÁRIOS (Tudo em 1 coluna) */
+    .grid-cols-2 { grid-template-columns: 1fr !important; }
+    .max-h-\[65vh\], .max-h-\[70vh\] { max-height: 75vh !important; }
 }
 
 @media (max-width: 1250px) {

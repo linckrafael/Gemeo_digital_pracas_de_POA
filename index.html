@@ -7,6 +7,9 @@
   
   <!-- Tailwind CSS via CDN para o visual moderno e limpo -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js para os gráficos do Dashboard -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <!-- ArcGIS API CSS e JS -->
   <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
@@ -25,36 +28,66 @@
     <span class="text-xs font-bold text-green-700 uppercase tracking-wider">Satélite</span>
   </div>
 
- <!-- Cabeçalho com Flexbox para controle total -->
-<header class="absolute top-0 left-0 right-0 h-16 bg-[#15803d] border-b border-[#15803d] shadow-sm z-20 flex items-center justify-between px-4 gap-4 select-none">
+ <!-- Cabeçalho (Altura aumentada no desktop para md:h-[85px] para acomodar o logo maior) -->
+<header class="absolute top-0 left-0 right-0 h-[65px] md:h-[85px] bg-[#15803d] border-b border-[#15803d] shadow-sm z-20 flex items-center justify-between px-2 md:px-5 gap-2 select-none">
     
-    <!-- Lado Esquerdo: Logo e Título (Shrink 0 garante que não encolham) -->
-    <div class="flex items-center gap-4 shrink-0">
-        <img src="./icones/logo-poa.png" class="h-10 object-contain" alt="POA">
-        <span class="font-bold text-green-400 text-[10px] tracking-wider uppercase hidden md:block">
-            Gêmeo Digital <br> Sistema de Gerenciamento de Praças e Parques
-        </span>
-    </div>
+    <!-- Lado Esquerdo: Logo e Título -->
+    <div class="flex items-center gap-2 md:gap-4 shrink-0 min-w-0">
+        <!-- Logo MÁXIMO: 55px no mobile e 75px no desktop. Sem travas de largura! -->
+        <img src="./icones/logo-poa.png" class="h-[55px] md:h-[95px] w-auto object-contain shrink-0" alt="POA">
+        
+        <!-- COLE ESTA LINHA ENTRE O LOGO E O TEXTO -->
+<div class="w-px h-10 bg-white/30 mx-3 hidden sm:block"></div>
 
-    <!-- Centro: Busca (Agora com flex-1 para ocupar apenas o espaço sobrando) -->
-    <div class="flex-1 max-w-[400px]">
-        <div class="relative flex items-center">
+        <!-- Texto: Separado e Estilizado -->
+        <div class="flex flex-col justify-center w-[130px] md:w-auto whitespace-normal mt-0.5">
+            <!-- Título Principal com muito destaque -->
+            <span class="font-black text-white text-[12px] md:text-[16px] tracking-widest uppercase leading-none drop-shadow-sm">
+                Gêmeo Digital
+            </span>
+            
+            <!-- Subtítulo menor e mais suave -->
+            <span class="font-semibold text-green-300 text-[7.5px] md:text-[10px] tracking-wide uppercase leading-tight mt-0.5 md:mt-1">
+                Sistema de Gerenciamento de Praças e Parques
+            </span>
+        </div>
+      </div>
+
+    <!-- Centro: Busca (Barra no Desktop, Ícone Lupa no Mobile) -->
+    <div class="flex-1 flex justify-end md:justify-center mx-1 md:mx-4 shrink-0">
+        <!-- Barra completa: só em telas médias/grandes -->
+        <div class="hidden md:flex relative items-center w-full max-w-[400px]">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            <input type="text" id="input-pesquisa-global" placeholder="Buscar praça..." class="w-full pl-10 pr-4 py-1.5 border border-green-200/80 rounded-full text-sm bg-white/90 focus:outline-none focus:ring-1 focus:ring-green-500">
+            <input type="text" id="input-pesquisa-global" placeholder="Buscar praça por nome, bairro ou rua" class="w-full pl-10 pr-4 py-1.5 border border-green-200/80 rounded-full text-sm bg-white/90 focus:outline-none focus:ring-1 focus:ring-green-500">
         </div>
+
+        <!-- Ícone da Lupa: só no Mobile -->
+        <button onclick="toggleBuscaMobile()" class="md:hidden p-2 text-green-300 hover:text-white transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </button>
     </div>
 
-    <!-- Lado Direito: DAV (Shrink 0) -->
-    <div class="flex items-center gap-3 shrink-0">
+    <!-- Lado Direito: DAV -->
+    <div class="flex items-center gap-2 md:gap-3 shrink-0">
         <div class="hidden lg:flex flex-col text-right">
             <span class="font-black text-green-400 text-sm leading-none">Diretoria de Áreas Verdes</span>
             <span class="text-[9px] uppercase font-bold text-green-200">SMAMUS</span>
         </div>
-        <img src="./icones/logo-dav.png" class="w-10 h-10 object-contain" alt="DAV">
+        <img src="./icones/logo-dav.png" class="h-8 md:h-12 w-auto max-w-[40px] md:max-w-none object-contain" alt="DAV">
     </div>
 </header>
+<!-- Popup de Busca Mobile (Abre abaixo do header) -->
+  <div id="popup-busca-mobile" class="hidden md:hidden absolute top-16 left-0 right-0 bg-[#15803d] border-b border-green-800 p-3 z-30 shadow-lg transition-all duration-200">
+      <div class="relative flex items-center w-full">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </div>
+          <input type="text" id="input-pesquisa-mobile" placeholder="Buscar praça..." class="w-full pl-10 pr-4 py-2 border border-green-200/80 rounded-xl text-sm bg-white/90 focus:outline-none shadow-inner">
+          <button onclick="toggleBuscaMobile()" class="ml-3 text-green-200 hover:text-white font-bold text-sm tracking-wide">Cancelar</button>
+      </div>
+  </div>
 
   <div id="wrapper-gaveta" class="absolute top-24 bottom-6 right-[88px] z-20 w-[420px] transition-all duration-300 ease-in-out transform translate-x-12 opacity-0 pointer-events-none flex flex-col shadow-2xl rounded-l-2xl overflow-hidden border-y border-l border-gray-200/60 bg-white/95 backdrop-blur-xl">
     
@@ -124,11 +157,20 @@
         <div id="tela-lista-obras">
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2"> Gestão de Obras</h2>
-            <button onclick="abrirFormularioObra()" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-sm transition">
+            <button onclick="abrirFormularioObra()" class="bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-sm transition">
               + Nova Obra
             </button>
           </div>
+
+          <!-- NOVO: BARRA DE PESQUISA EXCLUSIVA DE OBRAS -->
+          <div class="relative mb-4 shrink-0">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              </div>
+              <input type="text" id="input-pesquisa-obras" oninput="window.renderizarPainelObras()" placeholder="Pesquisar obra, praça ou empreiteira..." class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-blue-500 shadow-sm transition">
+          </div>
           
+          <!-- Filtros de Status -->
           <div class="flex gap-1.5 mb-5 bg-gray-50 p-1.5 rounded-xl border border-gray-200 shadow-inner">
             <button id="btn-filtro-obra-Todos" onclick="window.filtrarObras('Todos')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-gray-800 text-white shadow-sm border border-gray-800">Todas</button>
             <button id="btn-filtro-obra-EmExecucao" onclick="window.filtrarObras('Em Execução')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-white text-gray-500 border border-transparent hover:bg-amber-50 hover:text-amber-700">Em Execução</button>
@@ -147,8 +189,8 @@
               ← Voltar
             </button>
             <div class="flex gap-2">
-              <button id="btn-editar-obra-ativa" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg transition border border-gray-200">✏️ Editar</button>
-              <button id="btn-deletar-obra-ativa" class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg transition border border-red-200 shadow-sm">🗑️ Excluir</button>
+              <button id="btn-editar-obra-ativa" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1.5 rounded-lg transition border border-gray-200">Editar</button>
+              <button id="btn-deletar-obra-ativa" class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg transition border border-red-200 shadow-sm">Excluir</button>
             </div>
           </div>
           <!-- MÁGICA DA ROLAGEM ÚNICA -->
@@ -171,9 +213,26 @@
             <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Título da Obra</label>
               <input id="form-obra-titulo" type="text" placeholder="Ex: Revitalização do Playground" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
             </div>
-            <div><label class="block text-[10px] font-bold text-gray-500 uppercase">URL da Imagem de Capa</label>
-              <input id="form-obra-imagem" type="text" placeholder="Cole o link de uma foto..." class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
-            </div>
+            <div>
+  <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Capa da Obra (Upload ou Link)</label>
+  <div class="flex flex-col gap-2 p-2 border border-dashed border-gray-300 rounded-xl bg-white relative">
+    
+    <img id="preview-obra-imagem" src="" class="hidden w-full h-28 object-cover rounded-lg shadow-sm border border-gray-200">
+    
+    <label class="flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg cursor-pointer text-xs font-bold transition hover:bg-green-100 border border-green-200 shadow-sm">
+       Enviar do Computador
+       <input type="file" id="form-obra-imagem-file" accept="image/*" class="hidden" onchange="window.previewObraImagem(event)">
+    </label>
+    
+    <div class="relative flex items-center py-1">
+        <div class="flex-grow border-t border-gray-200"></div>
+        <span class="flex-shrink mx-2 text-[9px] text-gray-400 font-bold uppercase">OU</span>
+        <div class="flex-grow border-t border-gray-200"></div>
+    </div>
+    
+    <input id="form-obra-imagem" type="text" placeholder="Cole o link (URL) da imagem..." class="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg outline-none focus:border-blue-500 transition" oninput="window.previewObraUrl(this.value)">
+  </div>
+</div>
             <div class="grid grid-cols-2 gap-3">
               <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Empreiteira</label><input id="form-obra-empreiteira" type="text" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500"></div>
               <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Orçamento (R$)</label><input id="form-obra-orcamento" type="text" placeholder="Ex: 150.000,00" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500"></div>
@@ -193,7 +252,7 @@
             <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Descrição do Projeto</label>
               <textarea id="form-obra-desc" rows="3" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500"></textarea>
             </div>
-            <button onclick="salvarObraNoBanco()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition mt-2">💾 Salvar Obra</button>
+            <button onclick="salvarObraNoBanco()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition mt-2">Salvar Obra</button>
           </div>
         </div>
       </div>
@@ -266,14 +325,46 @@
             </button>
             <div id="container-camadas" class="hidden p-2 border-t border-gray-200 animate-fade-in">
               <div class="flex gap-1.5">
-                <button id="btn-vis-vegetacao" onclick="window.toggleVisibilidade('vegetacao')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 shadow-sm flex items-center justify-center gap-1">🌳 Vegetação</button>
-                <button id="btn-vis-mobiliario" onclick="window.toggleVisibilidade('mobiliario')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 shadow-sm flex items-center justify-center gap-1">🪑 Mobiliário</button>
-                <button id="btn-vis-estrutura" onclick="window.toggleVisibilidade('estrutura')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200 shadow-sm flex items-center justify-center gap-1">⚽ Estruturas</button>
+                <button id="btn-vis-vegetacao" onclick="window.toggleVisibilidade('vegetacao')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 shadow-sm flex items-center justify-center gap-1">Vegetação</button>
+                <button id="btn-vis-mobiliario" onclick="window.toggleVisibilidade('mobiliario')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 shadow-sm flex items-center justify-center gap-1">Mobiliário</button>
+                <button id="btn-vis-estrutura" onclick="window.toggleVisibilidade('estrutura')" class="flex-1 text-[10px] font-bold py-1.5 rounded-lg transition bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200 shadow-sm flex items-center justify-center gap-1">Estruturas</button>
               </div>
             </div>
           </div>
           
+          
           <div id="lista-itens-dinamica" class="space-y-3 mt-4 pb-6"></div>
+        </div>
+      </div>
+      <!-- 5. CONTEÚDO DASHBOARD -->
+      <div id="content-dashboard" class="hidden animate-fade-in w-full pb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 id="dash-titulo" class="text-xl font-bold text-gray-800">Visão Global</h2>
+          <span id="dash-badge" class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded uppercase border border-blue-200">Todo o Município</span>
+        </div>
+
+        <!-- Cards de Resumo -->
+        <div class="grid grid-cols-2 gap-3 mb-6">
+          <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+            <span class="block text-[10px] font-bold text-gray-500 uppercase">Total de Praças</span>
+            <span id="dash-qtd-pracas" class="text-2xl font-black text-green-700">0</span>
+          </div>
+          <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+            <span class="block text-[10px] font-bold text-gray-500 uppercase">Mobiliários Ativos</span>
+            <span id="dash-qtd-itens" class="text-2xl font-black text-blue-700">0</span>
+          </div>
+          <div class="col-span-2 bg-gradient-to-r from-green-50 to-blue-50 p-3 rounded-xl border border-green-100 shadow-sm">
+            <span class="block text-[10px] font-bold text-green-800 uppercase">Investimento em Obras</span>
+            <span id="dash-orcamento" class="text-2xl font-black text-gray-800">R$ 0,00</span>
+          </div>
+        </div>
+
+        <!-- Gráfico de Status -->
+        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <h3 class="text-xs font-bold text-gray-700 uppercase mb-4 text-center">Status de Manutenção (Mobiliário)</h3>
+          <div class="relative h-48 w-full flex justify-center">
+            <canvas id="grafico-manutencao"></canvas>
+          </div>
         </div>
       </div>
 
@@ -302,6 +393,10 @@
         <path d="M60,56h-12.92c-.15-1.22-.54-2.3-.93-3.35-.51-1.36-1.04-2.76-1.12-4.68-.02-.57-.02-1.16,0-1.83,.01-1.21,.03-2.66-.11-4.72,1.74-1.82,4.1-4.49,5.49-6.44,.1,0,.2,.01,.29,.01,.11,0,.23,0,.35,0,1.74-.09,3.24-.84,4.37-2.18,1.79-.23,3.41-1.43,4.23-3.15,.73-1.54,.67-3.25-.12-4.72,1.11-1.29,1.68-3.27,1.4-5.07-.25-1.63-1.16-2.91-2.58-3.65,.1-1.59-.42-3.1-1.43-4.14-.88-.91-2.06-1.38-3.39-1.38-.01,0-.03,0-.04,0-.63-1.83-1.91-3.27-3.58-4.03-1.99-.89-4.38-.74-6.81,.42-1.18-.92-2.9-1.31-4.53-.99-1.62,.32-2.93,1.27-3.7,2.67-1.39-.33-3.03-.07-4.28,.76-.9,.6-2.32,1.97-2.43,4.74-1.21,.08-2.3,.53-3.16,1.32-.88,.81-1.89,2.33-1.89,5.01-1.11,1.12-3.2,3.92-1.64,7.9,1.24,3.17,4.59,3.85,6.56,3.76,.9,.88,2,1.4,3.19,1.53,1.58,1.83,4.09,4.25,5.9,5.86,.01,.15,.01,.31,.03,.45,.3,3.17,.19,6.54,0,8.64-.08,.88-.37,2.38-.65,3.84-.25,1.32-.48,2.51-.6,3.4h-12.89v-4h3c.55,0,1-.45,1-1v-4c0-.55-.45-1-1-1h-3v-2h1c.55,0,1-.45,1-1v-6c0-.55-.45-1-1-1H8c-.55,0-1,.45-1,1v6c0,.55,.45,1,1,1h1v2h-3c-.55,0-1,.45-1,1v4c0,.55,.45,1,1,1h3v4H4c-.55,0-1,.45-1,1s.45,1,1,1H60c.55,0,1-.45,1-1s-.45-1-1-1Zm-15.32-17.25c-.08-.75-.16-1.34-.22-1.85-.13-1.06-.23-1.78-.25-3.05,.52-.12,1.06-.27,1.62-.46,.57,.44,1.41,.88,2.39,1.2-.99,1.28-2.31,2.82-3.54,4.16Zm-16.38-8.49c-.16,.02-3.85,.42-4.98-2.46-1.27-3.24,.79-5.42,1.45-6,.23-.2,.35-.49,.33-.79-.08-1.74,.35-3.1,1.24-3.92,.69-.64,1.62-.91,2.7-.77,.3,.04,.6-.06,.81-.27,.22-.21,.33-.5,.31-.8-.15-1.88,.38-3.27,1.51-4.02,1.09-.72,2.49-.69,3.25-.29,.26,.13,.56,.15,.83,.04,.27-.11,.48-.33,.58-.6,.57-1.66,1.88-2.15,2.61-2.29,1.23-.24,2.55,.13,3.22,.9,.31,.36,.83,.45,1.24,.22,2.11-1.17,4.07-1.4,5.67-.68,1.35,.61,2.33,1.88,2.69,3.48,.12,.51,.6,.85,1.13,.77,1.06-.17,1.95,.08,2.58,.72,.72,.74,1.03,1.96,.8,3.18-.09,.48,.18,.96,.64,1.13,1.16,.42,1.84,1.23,2.02,2.41,.24,1.55-.5,3.19-1.32,3.82-.21,.16-.35,.4-.38,.66-.04,.26,.04,.53,.2,.74,.79,1.02,.93,2.26,.39,3.4-.57,1.2-1.73,2-2.96,2.04-.31,0-.59,.16-.77,.4-.8,1.09-1.87,1.67-3.15,1.73-1.92,.1-3.76-.97-4.16-1.41-.19-.21-.46-.33-.74-.33-.11,0-.22,.02-.33,.06-4.33,1.53-7.75,1.26-9.89-.8-.21-.2-.49-.3-.79-.27-.29,.03-.55,.18-.72,.42-.49,.68-1.39,1.14-2.36,1.18-1.07,.05-2.05-.39-2.79-1.25-.22-.25-.55-.38-.87-.34Zm5.33,3.26c.59-.21,1.13-.51,1.59-.9,.54,.4,1.18,.77,1.94,1.06-.07,1.05-.12,2.12-.13,3.2-1.15-1.07-2.38-2.28-3.39-3.36Zm-24.63,4.49h14v4H9v-4Zm2,6h10v2H11v-2Zm-4,4H25v2H7v-2Zm4,8v-4h10v4H11Zm26.91,0c.12-.84,.34-1.98,.54-3.02,.29-1.5,.59-3.06,.68-4.03,.1-1.06,.39-4.86,0-9.01-.17-1.81-.13-3.84-.01-5.75,.91,.13,1.94,.16,3.09,.03,.03,1.16,.13,1.9,.26,2.94,.09,.68,.19,1.5,.3,2.67,.29,2.97,.27,4.82,.25,6.31,0,.71-.01,1.33,.01,1.93,.1,2.23,.7,3.86,1.24,5.29,.35,.92,.66,1.75,.8,2.64h-7.17Z"/>
     </svg>
 </button>
+<!-- NOVO: Botão do Dashboard -->
+    <button id="btn-dashboard" class="tab-btn w-11 h-11 flex items-center justify-center rounded-full text-gray-400 hover:text-green-600 hover:bg-green-50 border border-transparent transition-all" title="Dashboard Analítico">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+    </button>
   </div>
 
 
@@ -319,10 +414,19 @@
     </div>
   </div>
   
-  <div id="custom-tooltip" class="pointer-events-none fixed z-50 hidden flex-col items-center bg-white/90 backdrop-blur-md border border-green-200/50 shadow-lg rounded-xl px-4 py-2 transition-opacity duration-150">
-    <span id="tooltip-title" class="text-xs font-bold text-gray-800"></span>
-    <span id="tooltip-status" class="text-[10px] text-gray-500 mt-0.5"></span>
-    <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white/90 border-b border-r border-green-200/50 transform rotate-45"></div>
+  <!-- NOVO TOOLTIP COM IMAGEM (Fixo à direita do objeto) -->
+  <div id="custom-tooltip" class="pointer-events-none fixed z-50 hidden flex-col bg-white/95 backdrop-blur-md border border-green-200/60 shadow-xl rounded-xl transition-opacity duration-150 w-48 overflow-hidden">
+    
+    <!-- Imagem Real (Fica oculta se não houver foto) -->
+     <img id="tooltip-image" src="" class="w-full h-24 object-cover hidden rounded-t-xl" alt="Foto do local">
+    <!-- Textos -->
+    <div class="p-3 flex flex-col">
+        <span id="tooltip-title" class="text-xs font-bold text-gray-800 leading-tight"></span>
+        <span id="tooltip-status" class="text-[10px] text-gray-500 mt-1"></span>
+    </div>
+
+    <!-- Triângulo apontando para a ESQUERDA -->
+    <div class="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-white/95 border-l border-b border-green-200/60 transform rotate-45"></div>
   </div>
 
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
